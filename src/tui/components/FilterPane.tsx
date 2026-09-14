@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { COLORS, statusColor, symbols } from '../theme.js';
+import { COLORS, symbols } from '../theme.js';
 import type { FilterItem } from '../filters.js';
 import { windowFor } from '../useLayout.js';
 
@@ -12,7 +12,7 @@ export interface FilterPaneProps {
   width: number;
 }
 
-/** Left pane: scope, status and action rows with a ❯ cursor; the active scope/status carries a ● mark. */
+/** Left pane: scope, status and action rows; ❯ is the cursor, a dim ✓ marks what is currently applied. */
 export function FilterPane({ items, selected, focused, visibleRows, width }: FilterPaneProps) {
   const { items: visible, start } = windowFor(items, selected, visibleRows);
   const inner = Math.max(10, width - 4);
@@ -47,13 +47,12 @@ export function FilterPane({ items, selected, focused, visibleRows, width }: Fil
         }
         const isSelected = index === selected;
         const highlight = isSelected && focused;
-        const mark = item.kind === 'action' ? ' ' : item.active ? '●' : '○';
-        const labelColor = highlight ? COLORS.brand : item.kind === 'status' && item.active ? statusColor(item.label) : COLORS.white;
+        const mark = item.active ? symbols.check : ' ';
         return (
           <Text key={item.id} wrap="truncate" bold={highlight}>
-            <Text color={isSelected ? COLORS.brand : COLORS.dimmed}>{isSelected ? `${symbols.prompt} ` : '  '}</Text>
-            <Text color={item.active ? COLORS.brand : COLORS.dimmed}>{mark} </Text>
-            <Text color={labelColor}>{item.label.slice(0, labelWidth).padEnd(labelWidth)}</Text>
+            <Text color={COLORS.brand}>{isSelected ? `${symbols.prompt} ` : '  '}</Text>
+            <Text color={COLORS.dimmed}>{mark} </Text>
+            <Text color={highlight ? COLORS.brand : COLORS.white}>{item.label.slice(0, labelWidth).padEnd(labelWidth)}</Text>
             <Text color={COLORS.dimmed}>{item.count === undefined ? ''.padStart(countWidth) : String(item.count).padStart(countWidth)}</Text>
           </Text>
         );

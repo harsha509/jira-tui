@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest';
-import { ALL_STATUSES, buildFilterItems, clampIndex, stepIndex } from '../src/tui/filters.js';
+import { buildFilterItems, clampIndex, stepIndex } from '../src/tui/filters.js';
 import type { TuiActions } from '../src/tui/commands.js';
 import { getSnapshot, selectedIssue, tuiStore, visibleIssues } from '../src/tui/store.js';
 import type { Issue } from '../src/jira/types.js';
@@ -59,7 +59,6 @@ describe('buildFilterItems', () => {
       'scope:Team tickets',
       'scope:All open=3*',
       'heading:Status',
-      `status:${ALL_STATUSES}=3*`,
       'status:To Do=1',
       'status:Review=2',
       'heading:Actions',
@@ -78,7 +77,7 @@ describe('buildFilterItems', () => {
     const labels = buildFilterItems(getSnapshot())
       .filter((i) => i.kind === 'status')
       .map((i) => i.label);
-    expect(labels).toEqual([ALL_STATUSES, 'To Do', 'Weird']);
+    expect(labels).toEqual(['To Do', 'Weird']);
   });
 
   test('a scope row resets the status filter and loads the scope', async () => {
@@ -90,18 +89,35 @@ describe('buildFilterItems', () => {
     expect(getSnapshot().statusFilter).toBeNull();
   });
 
-  test('a status row narrows the visible tickets by column and is marked active', () => {
+  test('a status row narrows all open tickets by column; exactly one row is applied at a time', async () => {
     tuiStore.setBoard(BOARD);
+    tuiStore.setIssuesLoading({ label: 'all open tickets', jql: 'x' });
     tuiStore.setIssues([issue('A2A-1', 'To Do'), issue('A2A-2', 'in dev'), issue('A2A-3', 'IN Review')]);
     tuiStore.setIssuesSelected(2);
-    const review = buildFilterItems(getSnapshot()).find((i) => i.id === 'status:Review')!;
-    review.run!({} as TuiActions);
+    const { actions, calls } = spyActions();
+    await buildFilterItems(getSnapshot()).find((i) => i.id === 'status:Review')!.run!(actions);
+    expect(calls).toEqual([]);
     expect(visibleIssues().map((i) => i.key)).toEqual(['A2A-2', 'A2A-3']);
     expect(getSnapshot().issuesSelected).toBe(0);
     expect(selectedIssue()?.key).toBe('A2A-2');
-    expect(buildFilterItems(getSnapshot()).find((i) => i.id === 'status:Review')?.active).toBe(true);
-    buildFilterItems(getSnapshot()).find((i) => i.id === 'status:all')!.run!({} as TuiActions);
+    const applied = buildFilterItems(getSnapshot()).filter((i) => i.active);
+    expect(applied.map((i) => i.id)).toEqual(['status:Review']);
+    await buildFilterItems(getSnapshot()).find((i) => i.id === 'scope:all')!.run!(actions);
+    expect(calls).toEqual([{ action: 'selectScope', args: ['all'] }]);
     expect(visibleIssues()).toHaveLength(3);
+    expect(buildFilterItems(getSnapshot()).filter((i) => i.active).map((i) => i.id)).toEqual(['scope:all']);
+  });
+
+  test('a status row loads all open tickets first when another scope is showing, and hides counts until then', async () => {
+    tuiStore.setBoard(BOARD);
+    tuiStore.setIssuesLoading({ label: 'my open tickets', jql: 'x' });
+    tuiStore.setIssues([issue('A2A-1', 'To Do')]);
+    const todo = buildFilterItems(getSnapshot()).find((i) => i.id === 'status:To Do')!;
+    expect(todo.count).toBeUndefined();
+    const { actions, calls } = spyActions();
+    await todo.run!(actions);
+    expect(calls).toEqual([{ action: 'selectScope', args: ['all'] }]);
+    expect(getSnapshot().statusFilter).toBe('To Do');
   });
 
   test('search and open-ticket actions prompt, then act', async () => {
@@ -131,6 +147,7 @@ describe('buildFilterItems', () => {
 
 describe('cursor stepping', () => {
   test('skips headings in both directions and wraps', () => {
+    tuiStore.setIssues([issue('A2A-1', 'To Do')]);
     const items = buildFilterItems(getSnapshot());
     expect(items[0].kind).toBe('heading');
     expect(clampIndex(items, 0)).toBe(1);

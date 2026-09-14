@@ -19,8 +19,6 @@ export interface FilterItem {
 
 const SCOPE_TITLES: Record<Scope, string> = { mine: 'My tickets', team: 'Team tickets', all: 'All open' };
 
-export const ALL_STATUSES = 'All statuses';
-
 const ACTIONS: FilterItem[] = [
   {
     id: 'create',
@@ -73,37 +71,34 @@ function statusItems(state: TuiState): FilterItem[] {
         .map((c) => ({ name: c.name, statuses: c.statuses.filter((s) => open.has(s.toLowerCase())) }))
         .filter((c) => c.statuses.length > 0)
     : groupByStatus(state.issues).map((g) => ({ name: g.status, statuses: [g.status] }));
-  return [
-    {
-      id: 'status:all',
-      kind: 'status',
-      label: ALL_STATUSES,
-      count: state.issues.length,
-      active: state.statusFilter === null,
-      run: () => tuiStore.setStatusFilter(null),
+  const allLoaded = isScopeLoaded(state, 'all');
+  return groups.map((g) => ({
+    id: `status:${g.name}`,
+    kind: 'status' as const,
+    label: g.name,
+    count: allLoaded ? countIn(state, g.statuses) : undefined,
+    active: state.statusFilter?.toLowerCase() === g.name.toLowerCase(),
+    run: async (actions: TuiActions) => {
+      if (!isScopeLoaded(getSnapshot(), 'all')) await actions.selectScope('all');
+      tuiStore.setStatusFilter(g.name);
     },
-    ...groups.map((g) => ({
-      id: `status:${g.name}`,
-      kind: 'status' as const,
-      label: g.name,
-      count: countIn(state, g.statuses),
-      active: state.statusFilter?.toLowerCase() === g.name.toLowerCase(),
-      run: () => tuiStore.setStatusFilter(g.name),
-    })),
-  ];
+  }));
 }
 
-/** The left pane, top to bottom: scope, statuses (with counts from the loaded scope), actions. */
+function isScopeLoaded(state: TuiState, scope: Scope): boolean {
+  return state.query?.label === SCOPE_LABELS[scope];
+}
+
+/** The left pane, top to bottom: scopes, statuses of all open tickets, actions. Exactly one scope or status is applied. */
 export function buildFilterItems(state: TuiState): FilterItem[] {
-  const scopeLoaded = (scope: Scope) => state.query?.label === SCOPE_LABELS[scope];
   return [
     { id: 'h:scope', kind: 'heading', label: 'Scope' },
     ...SCOPES.map((scope) => ({
       id: `scope:${scope}`,
       kind: 'scope' as const,
       label: SCOPE_TITLES[scope],
-      count: scopeLoaded(scope) ? state.issues.length : undefined,
-      active: scopeLoaded(scope),
+      count: isScopeLoaded(state, scope) ? state.issues.length : undefined,
+      active: isScopeLoaded(state, scope) && state.statusFilter === null,
       run: async (actions: TuiActions) => {
         tuiStore.setStatusFilter(null);
         await actions.selectScope(scope);
