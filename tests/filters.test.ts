@@ -115,7 +115,7 @@ describe('buildFilterItems', () => {
     answerPrompt('92');
     await pending2;
     expect(calls).toEqual([
-      { action: 'loadIssues', args: [{ label: 'search "login"', jql: 'project = A2A AND summary ~ "login" ORDER BY updated DESC' }] },
+      { action: 'loadIssues', args: [{ label: 'search "login"', jql: 'project = A2A AND summary ~ "login*" ORDER BY updated DESC' }] },
       { action: 'ticketMenu', args: ['A2A-92'] },
     ]);
   });

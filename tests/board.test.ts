@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildColumns, chooseBoard, loadBoard, openStatusesOf } from '../src/jira/board.js';
 import type { JiraClient, ProjectStatus } from '../src/jira/client.js';
-import { openStatusClause, scopeJql } from '../src/jira/jql.js';
+import { openStatusClause, scopeJql, searchJql, searchTerms } from '../src/jira/jql.js';
 import { boardGroups } from '../src/tui/issue-format.js';
 import type { Issue } from '../src/jira/types.js';
 
@@ -103,6 +103,15 @@ describe('loadBoard', () => {
       },
     } as unknown as JiraClient;
     await expect(loadBoard(client, 'A2A', null)).rejects.toThrow('403');
+  });
+});
+
+describe('searchJql', () => {
+  test('adds wildcards to plain words, leaves short or punctuated ones, and matches the key when given', () => {
+    expect(searchTerms('phone caller x [UI] "q"')).toBe('phone* caller* x [UI] "q"');
+    expect(searchJql('A2A', 'architec')).toBe('project = A2A AND summary ~ "architec*" ORDER BY updated DESC');
+    expect(searchJql('A2A', '95', 'A2A-95')).toBe('project = A2A AND (summary ~ "95*" OR key = A2A-95) ORDER BY updated DESC');
+    expect(searchJql('A2A', 'say "hi"')).toBe('project = A2A AND summary ~ "say* \\"hi\\"" ORDER BY updated DESC');
   });
 });
 

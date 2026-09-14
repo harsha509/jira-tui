@@ -1,5 +1,5 @@
-import { searchJql, SCOPES, SCOPE_LABELS, type Scope } from '../jira/jql.js';
-import { COMMANDS, type TuiActions } from './commands.js';
+import { SCOPES, SCOPE_LABELS, type Scope } from '../jira/jql.js';
+import { COMMANDS, searchQuery, type TuiActions } from './commands.js';
 import { groupByStatus, resolveIssueKey } from './issue-format.js';
 import { askText } from './modal.js';
 import { getSnapshot, tuiStore, type TuiState } from './store.js';
@@ -36,7 +36,7 @@ const ACTIONS: FilterItem[] = [
       const text = await askText({ title: 'Search tickets', placeholder: 'words in the summary' });
       if (!text) return;
       tuiStore.setStatusFilter(null);
-      await actions.loadIssues({ label: `search "${text}"`, jql: searchJql(getSnapshot().project, text) });
+      await actions.loadIssues(searchQuery(text));
     },
   },
   {

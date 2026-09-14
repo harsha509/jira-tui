@@ -29,6 +29,18 @@ export function scopeJql(scope: Scope, project: string, teamJql: string | null, 
   return `project = ${project} AND ${openStatusClause(openStatuses)}${who} ORDER BY updated DESC`;
 }
 
-export function searchJql(project: string, text: string): string {
-  return `project = ${project} AND summary ~ "${escapeJql(text)}" ORDER BY updated DESC`;
+/** Each plain word of 2+ characters gets a trailing wildcard so "architec" finds "architecture". */
+export function searchTerms(text: string): string {
+  return text
+    .trim()
+    .split(/\s+/)
+    .map((word) => (/^[\p{L}\p{N}_-]{2,}$/u.test(word) ? `${word}*` : word))
+    .join(' ');
+}
+
+/** Summary search with partial-word matching; `key`, when given, is matched too so a ticket number finds its ticket. */
+export function searchJql(project: string, text: string, key: string | null = null): string {
+  const summary = `summary ~ "${escapeJql(searchTerms(text))}"`;
+  const where = key ? `(${summary} OR key = ${key})` : summary;
+  return `project = ${project} AND ${where} ORDER BY updated DESC`;
 }

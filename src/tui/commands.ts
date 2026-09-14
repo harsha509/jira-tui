@@ -45,6 +45,12 @@ export function scopeQuery(scope: Scope): IssueQuery {
   return { label: SCOPE_LABELS[scope], jql: scopeJql(scope, project, teamJql, board?.openStatuses ?? []) };
 }
 
+/** A summary search that also matches the ticket key when `text` looks like one. */
+export function searchQuery(text: string): IssueQuery {
+  const project = getSnapshot().project;
+  return { label: `search "${text}"`, jql: searchJql(project, text, resolveIssueKey(text, project)) };
+}
+
 function isScope(value: string): value is Scope {
   return (SCOPES as string[]).includes(value);
 }
@@ -106,7 +112,7 @@ export const COMMANDS: PaletteCommand[] = [
         tuiStore.setPaletteError('Usage: /search <text>');
         return;
       }
-      await actions.loadIssues({ label: `search "${text}"`, jql: searchJql(getSnapshot().project, text) });
+      await actions.loadIssues(searchQuery(text));
     },
   },
   {
@@ -356,5 +362,5 @@ export async function executeLine(line: string, actions: TuiActions): Promise<vo
     await actions.viewIssue(key);
     return;
   }
-  await actions.loadIssues({ label: `search "${trimmed}"`, jql: searchJql(getSnapshot().project, trimmed) });
+  await actions.loadIssues(searchQuery(trimmed));
 }

@@ -127,7 +127,7 @@ Filters (pick once)              Tickets (act here)
 | --- | --- |
 | `/list mine\|team\|all` | reload the list for a scope |
 | `/jql <query>` | run raw JQL |
-| `/search <text>` | search summaries |
+| `/search <text>` | search summaries; words match partially (`architec` finds architecture) and a ticket number or key matches the ticket itself |
 | `/ticket [key]` | action menu |
 | `/view [key]` | view a ticket |
 | `/move [key] [status]` | change status; no status opens the transition picker |

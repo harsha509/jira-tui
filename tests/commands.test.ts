@@ -49,7 +49,7 @@ describe('plain lines', () => {
         args: [
           {
             label: 'search "login button"',
-            jql: 'project = A2A AND summary ~ "login button" ORDER BY updated DESC',
+            jql: 'project = A2A AND summary ~ "login* button*" ORDER BY updated DESC',
           },
         ],
       },
@@ -60,7 +60,7 @@ describe('plain lines', () => {
     const { actions, calls } = spyActions();
     await executeLine('say "hi" \\ bye', actions);
     const query = calls[0].args[0] as { jql: string };
-    expect(query.jql).toContain('summary ~ "say \\"hi\\" \\\\ bye"');
+    expect(query.jql).toContain('summary ~ "say* \\"hi\\" \\\\ bye*"');
   });
 
   test('an empty line does nothing', async () => {
