@@ -91,11 +91,24 @@ prints every setting with where it came from (flag / environment / jira-cli file
 
 ## Using it
 
-The welcome screen picks a scope (my / team / all open tickets), then the main screen opens: a **menu** on the left, the **ticket list** on the right, a small log and a `/` prompt under the menu.
+The start page offers **Open my board**, **Open team board** and **Open all tickets**. The main screen is then split in two:
 
-**Menu (left).** `↑↓` move the `❯` cursor, `enter` runs the option: My / Team / All open tickets, Search tickets…, Open a ticket…, Create ticket…, Board view, Switch project…, Refresh, Help, Quit. Options that produce a list hand the cursor to the ticket pane.
+```
+Filters (pick once)              Tickets (act here)
+── Scope ──                      ❯ A2A-57   To Do   Jatin    UI Bug: no test profile…
+  ○ My tickets                     A2A-63   To Do   Jatin    [UI] No indication that…
+  ● All open            118        …
+── Status ──                     ┌ A2A-57 · Bug · Medium · updated 8h ago ────────┐
+❯ ● To Do              104       │ UI Bug :- Need to show if there is no test… │
+  ○ In Dev              10       │ To Do · Jatin Rana                           │
+  ○ In qa                2       │ enter actions · v view · m move · a assign … │
+── Actions ──                    └──────────────────────────────────────────────┘
+    Create ticket…
+```
 
-**Tickets (right).** `↑↓` select, `enter` opens the ticket's action menu (view / move status / assign / comment / open in browser), or press a letter directly:
+**Filters (left).** `↑↓` move the `❯` cursor, `enter` applies: a **scope** reloads the list from JIRA; a **status** (one row per board column, with live counts) narrows the loaded list instantly; the **actions** below create, search, open a ticket by number, switch project, show the board, help, quit. Applying a scope or status hands the cursor to the tickets.
+
+**Tickets (right).** `↑↓` select; the strip underneath shows the selected ticket's type, priority, status, assignee and age. `enter` opens the ticket's action menu (view / move status / assign / comment / open in browser), or press a letter directly:
 
 | Key | Does |
 | --- | --- |
@@ -104,9 +117,9 @@ The welcome screen picks a scope (my / team / all open tickets), then the main s
 | `a` | assign — pick me / unassign / any assignable user (type to filter) |
 | `c` | comment — type it in a prompt |
 | `o` | open in the browser |
-| `←` / `esc` | back to the menu |
+| `←` / `esc` | back to the filters |
 
-`→` from the menu jumps into the tickets. `esc` always steps back one level: it closes a picker or prompt, then the ticket view, then returns to the menu, then to the scope picker.
+`→` from the filters jumps into the tickets. `esc` always steps back one level: it closes a picker or prompt, then the ticket view, then returns to the filters, then to the start page.
 
 **Typing at the prompt.** Start typing from anywhere (or `/`) to reach the prompt at the bottom-left. A plain line is a ticket number or key (`92`, `ABC-92`) to view, or text to search summaries. Slash commands (type `/` for the palette, `tab` completes) act on the selected ticket when no key is given, and open a picker or prompt for anything else left out:
 
@@ -129,7 +142,7 @@ The welcome screen picks a scope (my / team / all open tickets), then the main s
 | `/scope` | back to the scope picker |
 | `/help`, `/quit` | |
 
-Other keys: `↑↓` at the prompt recalls history; `⇧tab` cycles menu → tickets → prompt; `p` on the welcome screen switches project; `ctrl+c` quits.
+Other keys: `↑↓` at the prompt recalls history; `⇧tab` cycles filters → tickets → prompt; `p` on the start page switches project; `/log` shows everything that happened this session; `ctrl+c` quits.
 
 ## Development
 

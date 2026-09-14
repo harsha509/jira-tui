@@ -1,108 +1,62 @@
 import React, { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import { COLORS } from '../theme.js';
-import { getSnapshot, subscribe, tuiStore, type MainFocus, type TranscriptEntry } from '../store.js';
+import { getSnapshot, subscribe, tuiStore, visibleIssues, type MainFocus, type TranscriptEntry } from '../store.js';
 import { completeCommand, executeLine, matchCommands, type TuiActions } from '../commands.js';
 import { historyLines, recordLine } from '../input-history.js';
-import { MENU } from '../menu.js';
+import { buildFilterItems, clampIndex, stepIndex } from '../filters.js';
 import { Header } from '../components/Header.js';
 import { CommandPalette } from '../components/CommandPalette.js';
+import { FilterPane } from '../components/FilterPane.js';
 import { IssuePanel } from '../components/IssuePanel.js';
-import { MenuPane } from '../components/MenuPane.js';
 import { StatusBar } from '../components/StatusBar.js';
+import { TicketDetail } from '../components/TicketDetail.js';
 import {
   columnWidths,
+  filterRows,
   inputLineBudget,
   inputLineCount,
-  issuePanelRows,
-  leftLayout,
+  ticketRows,
   visibleCommandCount,
   MIN_MAIN_ROWS,
 } from '../layout.js';
 
-const KIND_COLOR: Record<TranscriptEntry['kind'], string> = {
-  info: COLORS.white,
-  warn: COLORS.yellow,
-  error: COLORS.red,
-  command: COLORS.dimmed,
-  result: COLORS.green,
+const KIND_PREFIX: Record<TranscriptEntry['kind'], string> = {
+  info: '',
+  warn: '! ',
+  error: '✗ ',
+  command: '',
+  result: '✓ ',
 };
-
-interface LogRow {
-  key: string;
-  text: string;
-  color?: string;
-  indent: boolean;
-}
-
-/** One object per rendered line, newest last. */
-function toRows(entries: TranscriptEntry[]): LogRow[] {
-  const rows: LogRow[] = [];
-  for (const entry of entries) {
-    rows.push({ key: `${entry.id}:text`, text: entry.text, color: KIND_COLOR[entry.kind], indent: false });
-    entry.detail?.split('\n').forEach((line, j) => {
-      rows.push({ key: `${entry.id}:d${j}`, text: line, color: COLORS.dimmed, indent: true });
-    });
-  }
-  return rows;
-}
-
-function Log({ rows, budget }: { rows: LogRow[]; budget: number }) {
-  return (
-    <Box
-      flexDirection="column"
-      marginTop={1}
-      height={budget + 3}
-      overflow="hidden"
-      borderStyle="round"
-      borderColor={COLORS.muted}
-      paddingX={1}
-    >
-      <Text color={COLORS.dimmed} bold>
-        Log
-      </Text>
-      {rows.length === 0 ? (
-        <Text color={COLORS.dimmed}>Results and errors show here.</Text>
-      ) : (
-        rows.map((row) => (
-          <Box key={row.key} marginLeft={row.indent ? 2 : 0}>
-            <Text color={row.color} wrap="truncate">
-              {row.text || ' '}
-            </Text>
-          </Box>
-        ))
-      )}
-    </Box>
-  );
-}
 
 export interface MainScreenProps {
   actions: TuiActions;
 }
 
-/** Main window: menu, log and slash prompt on the left; the ticket list on the right. */
+/** Main window: filters on the left (pick once), tickets + the selected ticket's details and actions on the right. */
 export function MainScreen({ actions }: MainScreenProps) {
   const ui = useSyncExternalStore(subscribe, getSnapshot);
   const [value, setValue] = useState('');
-  const focus = ui.mainFocus;
-  const menuIndex = Math.min(ui.menuIndex, MENU.length - 1);
   const { stdout } = useStdout();
   const rows = stdout.rows || 24;
   const cols = stdout.columns || 80;
 
+  const items = useMemo(() => buildFilterItems(ui), [ui]);
+  const tickets = useMemo(() => visibleIssues(ui), [ui]);
+  const focus = ui.mainFocus;
+  const filterIndex = clampIndex(items, ui.menuIndex);
+  const selectedTicket = tickets[ui.issuesSelected];
+
   function setFocus(next: MainFocus): void {
     tuiStore.setMainFocus(next);
-  }
-
-  function setMenuIndex(next: number): void {
-    tuiStore.setMenuIndex(Math.max(0, Math.min(MENU.length - 1, next)));
   }
 
   const widths = columnWidths(cols);
   const maxCommands = visibleCommandCount(rows);
   const listVisible = focus === 'prompt' && value.trimStart().startsWith('/') && maxCommands >= 3;
   const inputLines = inputLineCount(value, widths.left, inputLineBudget(rows));
-  const { menuVisible, logRows } = leftLayout(rows, MENU.length, listVisible, inputLines);
+  const filterVisible = filterRows(rows, listVisible, inputLines);
+  const listRows = ticketRows(rows);
 
   const history = historyLines();
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -117,13 +71,10 @@ export function MainScreen({ actions }: MainScreenProps) {
     setValue(next === 0 ? draftRef.current : history[history.length - next]);
   }
 
-  const allRows = useMemo(() => toRows(ui.transcript), [ui.transcript]);
-  const logTail = allRows.slice(Math.max(0, allRows.length - logRows));
-
-  /** Run a menu item; when it produced a list, hand the cursor to the ticket pane. */
-  async function runMenuItem(index: number): Promise<void> {
-    const item = MENU[index];
-    if (!item || ui.running) return;
+  /** Run the filter under the cursor; when it produced rows on the right, the cursor goes there. */
+  async function runFilter(index: number): Promise<void> {
+    const item = items[index];
+    if (!item?.run || ui.running) return;
     tuiStore.setRunning(true);
     try {
       await item.run(actions);
@@ -132,11 +83,11 @@ export function MainScreen({ actions }: MainScreenProps) {
     } finally {
       tuiStore.setRunning(false);
     }
-    if (item.focusIssues && getSnapshot().issues.length > 0 && getSnapshot().screen === 'main') setFocus('issues');
+    if (item.focusTickets && visibleIssues().length > 0 && getSnapshot().screen === 'main') setFocus('issues');
   }
 
-  /** Bare-letter shortcuts while the issue list has focus. */
-  function issueShortcut(input: string, key: string): boolean {
+  /** Bare-letter shortcuts while the ticket list has focus. */
+  function ticketShortcut(input: string, key: string): boolean {
     const run: Record<string, () => unknown> = {
       v: () => actions.viewIssue(key),
       m: () => actions.moveIssue(key),
@@ -157,27 +108,26 @@ export function MainScreen({ actions }: MainScreenProps) {
 
   useInput((input, key) => {
     if (key.tab && key.shift) {
-      setFocus(focus === 'menu' ? (ui.issues.length > 0 ? 'issues' : 'prompt') : focus === 'issues' ? 'prompt' : 'menu');
+      setFocus(focus === 'menu' ? (tickets.length > 0 ? 'issues' : 'prompt') : focus === 'issues' ? 'prompt' : 'menu');
       return;
     }
     if (focus === 'menu') {
-      if (key.upArrow) setMenuIndex(menuIndex > 0 ? menuIndex - 1 : MENU.length - 1);
-      else if (key.downArrow) setMenuIndex(menuIndex < MENU.length - 1 ? menuIndex + 1 : 0);
-      else if (key.return) void runMenuItem(menuIndex);
-      else if (key.rightArrow && ui.issues.length > 0) setFocus('issues');
+      if (key.upArrow) tuiStore.setMenuIndex(stepIndex(items, filterIndex, -1));
+      else if (key.downArrow) tuiStore.setMenuIndex(stepIndex(items, filterIndex, 1));
+      else if (key.return) void runFilter(filterIndex);
+      else if (key.rightArrow && tickets.length > 0) setFocus('issues');
       else if (key.escape) actions.goToWelcome();
       else if (input && !key.ctrl && !key.meta && !key.tab && input !== ' ') jumpToPrompt(input);
       return;
     }
     if (focus === 'issues') {
-      const selected = ui.issues[ui.issuesSelected];
       if (key.upArrow) tuiStore.setIssuesSelected(ui.issuesSelected - 1);
       else if (key.downArrow) tuiStore.setIssuesSelected(ui.issuesSelected + 1);
-      else if (key.pageUp) tuiStore.setIssuesSelected(ui.issuesSelected - issuePanelRows(rows));
-      else if (key.pageDown) tuiStore.setIssuesSelected(ui.issuesSelected + issuePanelRows(rows));
-      else if (key.return && selected) void actions.ticketMenu(selected.key);
+      else if (key.pageUp) tuiStore.setIssuesSelected(ui.issuesSelected - listRows);
+      else if (key.pageDown) tuiStore.setIssuesSelected(ui.issuesSelected + listRows);
+      else if (key.return && selectedTicket) void actions.ticketMenu(selectedTicket.key);
       else if (key.escape || key.leftArrow) setFocus('menu');
-      else if (selected && !key.ctrl && !key.meta && issueShortcut(input, selected.key)) return;
+      else if (selectedTicket && !key.ctrl && !key.meta && ticketShortcut(input, selectedTicket.key)) return;
       else if (input && !key.ctrl && !key.meta && !key.tab && input !== ' ') jumpToPrompt(input);
       return;
     }
@@ -248,13 +198,16 @@ export function MainScreen({ actions }: MainScreenProps) {
     );
   }
 
-  const subtitle = `${ui.project}${ui.board ? ` · ${ui.board.name}` : ''} · ${ui.me?.displayName ?? '…'} · ${ui.query?.label ?? 'no list loaded'}`;
+  const subtitle = `${ui.project}${ui.board ? ` · ${ui.board.name}` : ''} · ${ui.me?.displayName ?? '…'}`;
+  const listLabel = `${ui.query?.label ?? 'no list loaded'}${ui.statusFilter ? ` · ${ui.statusFilter}` : ''}`;
+  const lastLog = ui.transcript[ui.transcript.length - 1];
+  const message = lastLog ? `${KIND_PREFIX[lastLog.kind]}${lastLog.text}` : ui.statusMessage;
   const hints =
     focus === 'menu'
-      ? ['↑↓ move', 'enter select', '→ tickets', 'type / for commands', 'esc scope', 'ctrl+c quit']
+      ? ['↑↓ move', 'enter apply', '→ tickets', 'type / for commands', 'esc start page', 'ctrl+c quit']
       : focus === 'issues'
-        ? ['↑↓ move', 'enter actions', 'v view', 'm move', 'a assign', 'c comment', 'o open', '← menu']
-        : ['enter run', 'tab complete', '↑↓ history', 'esc menu', 'ctrl+c quit'];
+        ? ['↑↓ move', 'enter actions', 'v view', 'm move', 'a assign', 'c comment', 'o open', '← filters']
+        : ['enter run', 'tab complete', '↑↓ history', 'esc filters', 'ctrl+c quit'];
 
   return (
     <Box flexDirection="column" height={rows}>
@@ -262,8 +215,7 @@ export function MainScreen({ actions }: MainScreenProps) {
         <Header subtitle={subtitle} />
         <Box flexDirection="row" flexGrow={1}>
           <Box flexDirection="column" width={widths.left} marginRight={1}>
-            <MenuPane items={MENU} selected={menuIndex} focused={focus === 'menu'} visibleRows={menuVisible} width={widths.left} />
-            {logRows > 0 ? <Log rows={logTail} budget={logRows} /> : null}
+            <FilterPane items={items} selected={filterIndex} focused={focus === 'menu'} visibleRows={filterVisible} width={widths.left} />
             <CommandPalette
               width={widths.left}
               maxCommands={maxCommands}
@@ -279,19 +231,26 @@ export function MainScreen({ actions }: MainScreenProps) {
               maxInputLines={inputLineBudget(rows)}
             />
           </Box>
-          <IssuePanel
-            issues={ui.issues}
-            label={ui.query?.label ?? ''}
-            loading={ui.issuesLoading}
-            error={ui.issuesError}
-            selected={ui.issuesSelected}
-            focused={focus === 'issues'}
-            width={widths.right}
-            visibleRows={issuePanelRows(rows)}
-          />
+          <Box flexDirection="column" width={widths.right}>
+            <Box height={listRows + 4}>
+              <IssuePanel
+                issues={tickets}
+                label={listLabel}
+                loading={ui.issuesLoading}
+                error={ui.issuesError}
+                selected={ui.issuesSelected}
+                focused={focus === 'issues'}
+                width={widths.right}
+                visibleRows={listRows}
+              />
+            </Box>
+            <Box marginTop={1}>
+              <TicketDetail issue={selectedTicket} width={widths.right} focused={focus === 'issues'} />
+            </Box>
+          </Box>
         </Box>
       </Box>
-      <StatusBar breadcrumb={focus === 'issues' ? 'Tickets' : focus === 'prompt' ? 'Prompt' : 'Menu'} hints={hints} message={ui.statusMessage} />
+      <StatusBar breadcrumb={focus === 'issues' ? 'Tickets' : focus === 'prompt' ? 'Prompt' : 'Filters'} hints={hints} message={message} />
     </Box>
   );
 }

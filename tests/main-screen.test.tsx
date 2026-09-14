@@ -50,20 +50,20 @@ beforeEach(() => {
 });
 
 describe('MainScreen', () => {
-  test('shows the menu with a cursor, the prompt and the issue panel', () => {
+  test('shows the filters with a cursor, the prompt, the ticket panel and the detail strip', () => {
     const { actions } = spyActions();
     const { lastFrame } = render(<MainScreen actions={actions} />);
     const frame = plain(lastFrame());
-    expect(frame).toContain('Menu');
-    expect(frame).toContain('❯ My open tickets');
-    expect(frame).toContain('Board view');
-    expect(frame).toContain('Issues');
+    expect(frame).toContain('Filters');
+    expect(frame).toContain('❯ ○ My tickets');
+    expect(frame).toContain('Tickets');
     expect(frame).toContain('/command, ticket no, or text');
-    expect(frame).toContain('Nothing here');
+    expect(frame).toContain('Select a ticket to see its details here.');
   });
 
-  test('↑↓ move the menu cursor and Enter runs the item, then the cursor moves to the tickets', async () => {
-    tuiStore.setIssues([issue('A2A-1', 'First')]);
+  test('↑↓ move the cursor over selectable rows and Enter applies a filter, then the cursor moves to the tickets', async () => {
+    tuiStore.setIssuesLoading({ label: 'all open tickets', jql: 'x' });
+    tuiStore.setIssues([issue('A2A-1', 'First'), issue('A2A-2', 'Second')]);
     const { actions, calls } = spyActions();
     const { stdin, lastFrame } = render(<MainScreen actions={actions} />);
     await settle();
@@ -71,24 +71,35 @@ describe('MainScreen', () => {
     await settle();
     stdin.write(DOWN);
     await settle();
-    expect(plain(lastFrame())).toContain('❯ All open tickets');
+    expect(plain(lastFrame())).toContain('❯ ● All open');
+    stdin.write(DOWN);
+    await settle();
+    expect(plain(lastFrame())).toContain('❯ ● All statuses');
+    stdin.write(DOWN);
+    await settle();
+    expect(plain(lastFrame())).toContain('❯ ○ In Dev');
     stdin.write(ENTER);
     await settle();
-    expect(calls).toEqual([{ action: 'selectScope', args: ['all'] }]);
+    expect(calls).toEqual([]);
     expect(plain(lastFrame())).toContain('enter actions');
+    expect(plain(lastFrame())).toContain('all open tickets · In Dev · 2 tickets');
+    expect(plain(lastFrame())).toContain('A2A-1');
   });
 
-  test('→ moves into the tickets and ← comes back to the menu', async () => {
-    tuiStore.setIssues([issue('A2A-1', 'First')]);
+  test('→ moves into the tickets and ← comes back to the filters; the detail strip follows the cursor', async () => {
+    tuiStore.setIssues([issue('A2A-1', 'First'), issue('A2A-2', 'Second')]);
     const { actions } = spyActions();
     const { stdin, lastFrame } = render(<MainScreen actions={actions} />);
     await settle();
     stdin.write(RIGHT);
     await settle();
-    expect(plain(lastFrame())).toContain('enter actions');
+    expect(plain(lastFrame())).toContain('↑↓ · enter actions');
+    stdin.write(DOWN);
+    await settle();
+    expect(plain(lastFrame())).toMatch(/A2A-2 .*\n.*Second/);
     stdin.write(LEFT);
     await settle();
-    expect(plain(lastFrame())).not.toContain('enter actions');
+    expect(plain(lastFrame())).not.toContain('↑↓ · enter actions');
     expect(plain(lastFrame())).toContain('↑↓ · enter');
   });
 
@@ -133,7 +144,7 @@ describe('MainScreen', () => {
     expect(plain(lastFrame())).toContain('A2A-1');
     stdin.write(SHIFT_TAB);
     await settle();
-    expect(plain(lastFrame())).toContain('enter actions');
+    expect(plain(lastFrame())).toContain('↑↓ · enter actions');
     stdin.write(DOWN);
     await settle();
     stdin.write(ENTER);
@@ -187,12 +198,12 @@ describe('MainScreen', () => {
     expect(plain(lastFrame())).not.toContain('❯ abc');
     stdin.write(ESC);
     await settle();
-    expect(plain(lastFrame())).toContain('↑↓ · enter');
+    expect(plain(lastFrame())).toContain('Filters                  ↑↓ · enter');
     stdin.write(RIGHT);
     await settle();
     stdin.write(ESC);
     await settle();
-    expect(plain(lastFrame())).toContain('↑↓ · enter');
+    expect(plain(lastFrame())).toContain('Filters                  ↑↓ · enter');
     expect(calls).toEqual([]);
     stdin.write(ESC);
     await settle();
@@ -206,11 +217,11 @@ describe('MainScreen', () => {
     await settle();
     first.stdin.write(SHIFT_TAB);
     await settle();
-    expect(plain(first.lastFrame())).toContain('enter actions');
+    expect(plain(first.lastFrame())).toContain('↑↓ · enter actions');
     first.unmount();
     const second = render(<MainScreen actions={actions} />);
     await settle();
-    expect(plain(second.lastFrame())).toContain('enter actions');
+    expect(plain(second.lastFrame())).toContain('↑↓ · enter actions');
   });
 
   test('renders every issue row within the panel', () => {
@@ -219,7 +230,7 @@ describe('MainScreen', () => {
     const { lastFrame } = render(<MainScreen actions={actions} />);
     const frame = plain(lastFrame());
     expect(frame).toContain('A2A-3');
-    expect(frame).toContain('3 issues');
+    expect(frame).toContain('3 tickets');
   });
 });
 

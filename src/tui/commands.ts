@@ -254,6 +254,15 @@ export const COMMANDS: PaletteCommand[] = [
     run: (actions) => actions.goToWelcome(),
   },
   {
+    id: 'log',
+    name: '/log',
+    summary: 'Show everything that happened this session',
+    run: () => {
+      const lines = getSnapshot().transcript.flatMap((e) => [e.text, ...(e.detail ? e.detail.split('\n').map((l) => `  ${l}`) : [])]);
+      tuiStore.showViewer({ title: 'Log', subtitle: 'newest last', lines });
+    },
+  },
+  {
     id: 'clear-log',
     name: '/clear-log',
     summary: 'Clear the transcript',

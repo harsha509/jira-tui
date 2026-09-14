@@ -49,35 +49,33 @@ export function transcriptRows(termRows: number, listVisible: boolean, inputLine
   );
 }
 
-/** Menu box: border(2) + title(1). Log box: the same. */
-export const MENU_CHROME_ROWS = 3;
-export const LOG_CHROME_ROWS = 3;
-export const MIN_MENU_ROWS = 3;
-export const MIN_LOG_ROWS = 2;
+/** Filter pane and ticket panel chrome: border(2) + title(1). */
+export const PANE_CHROME_ROWS = 3;
+/** TicketDetail box: border(2) + 4 lines. */
+export const DETAIL_ROWS = 6;
+export const MIN_FILTER_ROWS = 3;
 
-export interface LeftLayout {
-  /** Menu items shown (the list scrolls when fewer than the item count). */
-  menuVisible: number;
-  /** Log body rows; 0 hides the log box entirely. */
-  logRows: number;
+/** Filter rows visible in the left pane once the prompt (and its command list) have taken theirs. */
+export function filterRows(termRows: number, listVisible: boolean, inputLines: number): number {
+  return Math.max(
+    MIN_FILTER_ROWS,
+    contentRows(termRows) - PANE_CHROME_ROWS - 1 - paletteRows(termRows, listVisible) - INPUT_CHROME_ROWS - inputLines
+  );
 }
 
-/** Split the left column between the menu, the log and the prompt: the menu first, the log gets the rest. */
-export function leftLayout(termRows: number, itemCount: number, listVisible: boolean, inputLines: number): LeftLayout {
-  const avail = contentRows(termRows) - 1 - paletteRows(termRows, listVisible) - INPUT_CHROME_ROWS - inputLines;
-  const fullMenu = itemCount + MENU_CHROME_ROWS;
-  const logBlock = 1 + LOG_CHROME_ROWS;
-  if (avail >= fullMenu + logBlock + MIN_LOG_ROWS) return { menuVisible: itemCount, logRows: avail - fullMenu - logBlock };
-  if (avail >= MIN_MENU_ROWS + MENU_CHROME_ROWS + logBlock + MIN_LOG_ROWS) {
-    return { menuVisible: avail - MENU_CHROME_ROWS - logBlock - MIN_LOG_ROWS, logRows: MIN_LOG_ROWS };
-  }
-  return { menuVisible: Math.max(1, Math.min(itemCount, avail - MENU_CHROME_ROWS)), logRows: 0 };
+/** Ticket panel chrome: border(2) + title(1) + query line(1). */
+export const TICKET_PANEL_CHROME_ROWS = 4;
+
+/** Ticket rows in the right pane above the detail strip. */
+export function ticketRows(termRows: number): number {
+  return Math.max(1, contentRows(termRows) - TICKET_PANEL_CHROME_ROWS - 1 - DETAIL_ROWS);
 }
 
-export const MIN_MAIN_ROWS = FRAME_ROWS + HEADER_ROWS + STATUS_BAR_ROWS + 1 + INPUT_CHROME_ROWS + 1 + MENU_CHROME_ROWS + 1;
+export const MIN_MAIN_ROWS =
+  FRAME_ROWS + HEADER_ROWS + STATUS_BAR_ROWS + PANE_CHROME_ROWS + MIN_FILTER_ROWS + 1 + INPUT_CHROME_ROWS + 1;
 
 export function inputLineBudget(termRows: number): number {
-  return Math.max(1, Math.min(4, contentRows(termRows) - INPUT_CHROME_ROWS - MENU_CHROME_ROWS - 3));
+  return Math.max(1, Math.min(4, contentRows(termRows) - INPUT_CHROME_ROWS - PANE_CHROME_ROWS - MIN_FILTER_ROWS - 1));
 }
 
 /** Rows a prompt of `query` wraps to inside a `width`-column box, capped at `max`. */

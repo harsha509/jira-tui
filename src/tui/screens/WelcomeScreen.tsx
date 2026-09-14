@@ -1,11 +1,17 @@
 import React, { useState, useSyncExternalStore } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
-import { SCOPES, SCOPE_LABELS, type Scope } from '../../jira/jql.js';
+import { SCOPES, type Scope } from '../../jira/jql.js';
 import { COLORS, symbols } from '../theme.js';
 import type { TuiActions } from '../commands.js';
 import { StatusBar } from '../components/StatusBar.js';
 import { Wordmark } from '../components/Wordmark.js';
 import { getSnapshot, subscribe } from '../store.js';
+
+const WELCOME_LABELS: Record<Scope, string> = {
+  mine: 'Open my board',
+  team: 'Open team board',
+  all: 'Open all tickets',
+};
 
 export interface WelcomeScreenProps {
   actions: TuiActions;
@@ -33,8 +39,8 @@ export function WelcomeScreen({ actions }: WelcomeScreenProps) {
   });
 
   function label(scope: Scope): string {
-    const text = SCOPE_LABELS[scope];
-    return scope === 'team' && !ui.teamJql ? `${text} (set JIRA_TEAM)` : text;
+    const text = WELCOME_LABELS[scope];
+    return scope === 'team' && !ui.teamJql ? `${text} (asks for emails)` : text;
   }
 
   return (
@@ -57,7 +63,7 @@ export function WelcomeScreen({ actions }: WelcomeScreenProps) {
           </Text>
         </Box>
         <Box marginTop={2}>
-          <Text color={COLORS.dimmed}>What do you want to see?</Text>
+          <Text color={COLORS.dimmed}>Where do you want to start?</Text>
         </Box>
         <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={COLORS.muted} paddingX={4} paddingY={1}>
           {SCOPES.map((scope, i) => (

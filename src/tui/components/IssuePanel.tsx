@@ -34,21 +34,21 @@ export function IssuePanel({ issues, label, loading, error, selected, focused, w
     >
       <Box justifyContent="space-between">
         <Text color={focused ? COLORS.brand : COLORS.dimmed} bold wrap="truncate">
-          Issues
+          Tickets
         </Text>
         <Text color={COLORS.dimmed} wrap="truncate">
-          {focused ? '↑↓ · enter actions · ← menu' : issues.length > 0 ? '→ to select' : ''}
+          {focused ? '↑↓ · enter actions · ← filters' : issues.length > 0 ? '→ to select' : ''}
         </Text>
       </Box>
       <Text color={COLORS.dimmed} wrap="truncate">
-        {loading ? 'Loading…' : `${label || 'no query'} · ${issues.length} issue${issues.length === 1 ? '' : 's'}`}
+        {loading ? 'Loading…' : `${label || 'no query'} · ${issues.length} ticket${issues.length === 1 ? '' : 's'}`}
       </Text>
       {error ? (
         <Text color={COLORS.red} wrap="truncate">
           {error}
         </Text>
       ) : issues.length === 0 && !loading ? (
-        <Text color={COLORS.dimmed}>Nothing here — /list, /jql or type text to search.</Text>
+        <Text color={COLORS.dimmed}>Nothing here — pick a scope or status on the left.</Text>
       ) : (
         items.map((issue, i) => {
           const index = start + i;

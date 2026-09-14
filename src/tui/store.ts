@@ -64,7 +64,10 @@ export interface TuiState {
   issues: Issue[];
   issuesLoading: boolean;
   issuesError: string | null;
+  /** Index into visibleIssues(). */
   issuesSelected: number;
+  /** Board column (or status) name narrowing the loaded list; null shows everything. */
+  statusFilter: string | null;
   /** Which main-screen pane owns the keyboard; kept here because dialogs unmount the screen. */
   mainFocus: MainFocus;
   menuIndex: number;
@@ -97,6 +100,7 @@ function initial(): TuiState {
     issuesLoading: false,
     issuesError: null,
     issuesSelected: 0,
+    statusFilter: null,
     mainFocus: 'menu',
     menuIndex: 0,
     transcript: [],
@@ -138,9 +142,22 @@ export function getSnapshot(): TuiState {
   return state;
 }
 
+/** Statuses the current filter admits (a board column's statuses, or the name itself), lower-cased. */
+function filterStatuses(s: TuiState): Set<string> | null {
+  if (!s.statusFilter) return null;
+  const column = s.board?.columns.find((c) => c.name.toLowerCase() === s.statusFilter!.toLowerCase());
+  return new Set((column?.statuses ?? [s.statusFilter]).map((name) => name.toLowerCase()));
+}
+
+/** The loaded list narrowed by the status filter — what the ticket pane shows. */
+export function visibleIssues(s: TuiState = state): Issue[] {
+  const wanted = filterStatuses(s);
+  return wanted ? s.issues.filter((i) => wanted.has(i.status.toLowerCase())) : s.issues;
+}
+
 /** The issue highlighted in the panel, if any. */
 export function selectedIssue(): Issue | undefined {
-  return state.issues[state.issuesSelected];
+  return visibleIssues()[state.issuesSelected];
 }
 
 /** Observable state behind every screen; consumed via useSyncExternalStore. */
@@ -156,7 +173,7 @@ export const tuiStore = {
   /** Switching project also drops the previous board and list. */
   setProject(project: string, teamJql: string | null): void {
     const changed = project !== state.project;
-    set(changed ? { project, teamJql, board: null, query: null, issues: [], issuesSelected: 0 } : { project, teamJql });
+    set(changed ? { project, teamJql, board: null, query: null, issues: [], issuesSelected: 0, statusFilter: null } : { project, teamJql });
   },
   setBoard(board: BoardInfo | null): void {
     set({ board });
@@ -171,18 +188,22 @@ export const tuiStore = {
     set({ query, issuesLoading: true, issuesError: null });
   },
   setIssues(issues: Issue[]): void {
+    const next = { ...state, issues };
     set({
       issues,
       issuesLoading: false,
       issuesError: null,
-      issuesSelected: Math.min(state.issuesSelected, Math.max(0, issues.length - 1)),
+      issuesSelected: Math.min(state.issuesSelected, Math.max(0, visibleIssues(next).length - 1)),
     });
+  },
+  setStatusFilter(statusFilter: string | null): void {
+    set({ statusFilter, issuesSelected: 0 });
   },
   setIssuesError(issuesError: string): void {
     set({ issuesError, issuesLoading: false });
   },
   setIssuesSelected(issuesSelected: number): void {
-    set({ issuesSelected: Math.max(0, Math.min(issuesSelected, state.issues.length - 1)) });
+    set({ issuesSelected: Math.max(0, Math.min(issuesSelected, visibleIssues().length - 1)) });
   },
   setMainFocus(mainFocus: MainFocus): void {
     set({ mainFocus });
