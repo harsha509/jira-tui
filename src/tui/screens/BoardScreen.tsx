@@ -5,7 +5,7 @@ import { getSnapshot, subscribe } from '../store.js';
 import type { TuiActions } from '../commands.js';
 import { Header } from '../components/Header.js';
 import { StatusBar } from '../components/StatusBar.js';
-import { groupByStatus, issueRow } from '../issue-format.js';
+import { boardGroups, groupByStatus, issueRow } from '../issue-format.js';
 import { useAvailableRows } from '../useLayout.js';
 import { CHROME_COLS, FRAME_ROWS, HEADER_ROWS, STATUS_BAR_ROWS } from '../layout.js';
 
@@ -30,9 +30,13 @@ export function BoardScreen({ actions }: BoardScreenProps) {
   const [offset, setOffset] = useState(0);
   const width = Math.max(20, cols - CHROME_COLS - 2);
 
+  const groups = useMemo(
+    () => (ui.board ? boardGroups(ui.issues, ui.board.columns) : groupByStatus(ui.issues)),
+    [ui.issues, ui.board]
+  );
   const boardRows = useMemo<BoardRow[]>(() => {
     const out: BoardRow[] = [];
-    for (const group of groupByStatus(ui.issues)) {
+    for (const group of groups) {
       if (out.length) out.push({ key: `gap:${group.status}`, text: '', color: COLORS.dimmed, bold: false });
       out.push({ key: `h:${group.status}`, text: `${group.status} (${group.issues.length})`, color: statusColor(group.status), bold: true });
       for (const issue of group.issues) {
@@ -40,7 +44,7 @@ export function BoardScreen({ actions }: BoardScreenProps) {
       }
     }
     return out;
-  }, [ui.issues, width]);
+  }, [groups, width]);
 
   const maxOffset = Math.max(0, boardRows.length - viewport);
   const clamped = Math.min(offset, maxOffset);
@@ -59,8 +63,11 @@ export function BoardScreen({ actions }: BoardScreenProps) {
   return (
     <Box flexDirection="column" height={rows}>
       <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={COLORS.brand} paddingX={1}>
-        <Header subtitle={`Board · ${ui.query?.label ?? 'no list loaded'} · ${ui.issues.length} issues`} />
-        <Box flexDirection="column" marginTop={1} height={viewport} overflow="hidden">
+        <Header subtitle={`${ui.board?.name ?? 'Board'} · ${ui.query?.label ?? 'no list loaded'} · ${ui.issues.length} issues`} />
+        <Text color={COLORS.dimmed} wrap="truncate">
+          {groups.map((g) => `${g.status} ${g.issues.length}`).join(' · ') || ' '}
+        </Text>
+        <Box flexDirection="column" height={viewport} overflow="hidden">
           {ui.issuesLoading ? (
             <Text color={COLORS.dimmed}>Loading…</Text>
           ) : ui.issuesError ? (

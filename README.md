@@ -58,7 +58,7 @@ Optional:
 | Variable | Meaning |
 | --- | --- |
 | `JIRA_TEAM` | Who "team open tickets" means: a JQL fragment such as `assignee in ("a@x.com","b@x.com")`, or plain comma-separated emails |
-| `JIRA_BOARD_ID` | Board id (also read from `board.id:` in the jira-cli config); informational for now |
+| `JIRA_BOARD_ID` | Which board's columns to use (also read from `board.id:` in the jira-cli config); defaults to the project's own board |
 
 **Getting a token.** Create one at <https://id.atlassian.com/manage-profile/security/api-tokens>. It is a secret: never commit it, and prefer a keychain over a plain-text file.
 
@@ -73,27 +73,42 @@ export JIRA_PROJECT="ABC"
 export JIRA_TEAM="you@example.com,teammate@example.com"   # optional
 ```
 
-Open a new terminal after editing so the variables are exported. If anything required is missing, `jira-tui` prints exactly what is missing and exits.
+Open a new terminal after editing so the variables are exported (`export` matters: a plain `VAR=...` line is invisible to jira-tui).
+
+**Check it:**
+
+```bash
+jira-tui doctor
+```
+
+prints every setting with where it came from (flag / environment / jira-cli file), masks the token, and then checks the login, the project and the board. If anything required is missing, `jira-tui` itself prints exactly what is missing and exits.
+
+**Which tickets are loaded.** On start jira-tui finds the project's board (the one in `JIRA_BOARD_ID` / jira-cli's `board.id`, else the project's own board) and reads its columns. The ticket list then loads only statuses that are columns on that board, excluding Done-category ones, and `/board` shows the columns in the board's own order, empty columns included. A project without a board falls back to `status != Done`.
+
+**Switching project.** `jira-tui --project KEY` opens on another project; inside the app `/project KEY` switches, and `/project` alone opens a picker of every project you can see (type to filter). The board and list reload for the new project.
+
+**Team without `JIRA_TEAM`.** Choosing "team open tickets" asks for the emails once per session; `/team a@x.com,b@x.com` sets them too.
 
 ## Using it
 
-The welcome screen picks a scope (my / team / all open tickets), then the main screen opens with the ticket list on the right.
+The welcome screen picks a scope (my / team / all open tickets), then the main screen opens: a **menu** on the left, the **ticket list** on the right, a small log and a `/` prompt under the menu.
 
-**Acting on a ticket.** Press `⇧tab` (or `esc` on an empty prompt) to move into the ticket list, `↑↓` to select, then:
+**Menu (left).** `↑↓` move the `❯` cursor, `enter` runs the option: My / Team / All open tickets, Search tickets…, Open a ticket…, Create ticket…, Board view, Switch project…, Refresh, Help, Quit. Options that produce a list hand the cursor to the ticket pane.
+
+**Tickets (right).** `↑↓` select, `enter` opens the ticket's action menu (view / move status / assign / comment / open in browser), or press a letter directly:
 
 | Key | Does |
 | --- | --- |
-| `enter` | action menu: view / move status / assign / comment / open |
 | `v` | view the ticket (description, comments); inside the view `m`, `a`, `c`, `o` act on it |
 | `m` | move status — pick from the transitions JIRA allows right now |
 | `a` | assign — pick me / unassign / any assignable user (type to filter) |
 | `c` | comment — type it in a prompt |
 | `o` | open in the browser |
-| `esc` | back to the prompt |
+| `←` / `esc` | back to the menu |
 
-`esc` always steps back one level: it closes a picker or prompt, then the ticket view, then clears a typed line, then moves to the ticket list, then returns to the scope picker.
+`→` from the menu jumps into the tickets. `esc` always steps back one level: it closes a picker or prompt, then the ticket view, then returns to the menu, then to the scope picker.
 
-**Typing at the prompt.** A plain line is a ticket number or key (`92`, `ABC-92`) to view, or text to search summaries. Slash commands (type `/` for the palette, `tab` completes) act on the selected ticket when no key is given, and open a picker or prompt for anything else left out:
+**Typing at the prompt.** Start typing from anywhere (or `/`) to reach the prompt at the bottom-left. A plain line is a ticket number or key (`92`, `ABC-92`) to view, or text to search summaries. Slash commands (type `/` for the palette, `tab` completes) act on the selected ticket when no key is given, and open a picker or prompt for anything else left out:
 
 | Command | Does |
 | --- | --- |
@@ -106,13 +121,15 @@ The welcome screen picks a scope (my / team / all open tickets), then the main s
 | `/assign [key] [me\|none\|email\|name]` | assign; nobody given opens the user picker |
 | `/comment [key] [text]` | comment; no text opens a prompt |
 | `/create [type] [summary]` | create a ticket; missing type or summary is asked for |
+| `/project [KEY]` | switch project; no key opens a picker |
+| `/team <emails or JQL>` | set who "team" means for this session |
 | `/open [key]` | open in the browser |
-| `/board` | the current list grouped by status in board column order |
+| `/board` | the current list in the board's columns and order |
 | `/refresh` | reload the current list |
 | `/scope` | back to the scope picker |
 | `/help`, `/quit` | |
 
-Other keys: `↑↓` at the prompt recalls history; `⇧tab` cycles prompt → tickets → transcript; `ctrl+c` quits.
+Other keys: `↑↓` at the prompt recalls history; `⇧tab` cycles menu → tickets → prompt; `p` on the welcome screen switches project; `ctrl+c` quits.
 
 ## Development
 

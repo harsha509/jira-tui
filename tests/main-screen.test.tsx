@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { render } from 'ink-testing-library';
 import React from 'react';
-import { MainScreen, resetMainFocus } from '../src/tui/screens/MainScreen.js';
+import { MainScreen } from '../src/tui/screens/MainScreen.js';
 import { CommandPalette } from '../src/tui/components/CommandPalette.js';
 import { OutputDialog, wrapLine } from '../src/tui/components/OutputDialog.js';
 import { tuiStore } from '../src/tui/store.js';
@@ -15,6 +15,8 @@ const ENTER = '\r';
 const TAB = '\t';
 const SHIFT_TAB = `${ESC}[Z`;
 const DOWN = `${ESC}[B`;
+const RIGHT = `${ESC}[C`;
+const LEFT = `${ESC}[D`;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 function spyActions() {
@@ -43,19 +45,51 @@ function plain(frame: string | undefined): string {
 beforeEach(() => {
   tuiStore.reset();
   resetHistory();
-  resetMainFocus();
   tuiStore.setProject('A2A', null);
+  tuiStore.goTo('main');
 });
 
 describe('MainScreen', () => {
-  test('shows the prompt, the transcript and the issue panel', () => {
+  test('shows the menu with a cursor, the prompt and the issue panel', () => {
     const { actions } = spyActions();
     const { lastFrame } = render(<MainScreen actions={actions} />);
     const frame = plain(lastFrame());
-    expect(frame).toContain('Transcript');
+    expect(frame).toContain('Menu');
+    expect(frame).toContain('❯ My open tickets');
+    expect(frame).toContain('Board view');
     expect(frame).toContain('Issues');
-    expect(frame).toContain('Ticket no, text, or /help');
+    expect(frame).toContain('/command, ticket no, or text');
     expect(frame).toContain('Nothing here');
+  });
+
+  test('↑↓ move the menu cursor and Enter runs the item, then the cursor moves to the tickets', async () => {
+    tuiStore.setIssues([issue('A2A-1', 'First')]);
+    const { actions, calls } = spyActions();
+    const { stdin, lastFrame } = render(<MainScreen actions={actions} />);
+    await settle();
+    stdin.write(DOWN);
+    await settle();
+    stdin.write(DOWN);
+    await settle();
+    expect(plain(lastFrame())).toContain('❯ All open tickets');
+    stdin.write(ENTER);
+    await settle();
+    expect(calls).toEqual([{ action: 'selectScope', args: ['all'] }]);
+    expect(plain(lastFrame())).toContain('enter actions');
+  });
+
+  test('→ moves into the tickets and ← comes back to the menu', async () => {
+    tuiStore.setIssues([issue('A2A-1', 'First')]);
+    const { actions } = spyActions();
+    const { stdin, lastFrame } = render(<MainScreen actions={actions} />);
+    await settle();
+    stdin.write(RIGHT);
+    await settle();
+    expect(plain(lastFrame())).toContain('enter actions');
+    stdin.write(LEFT);
+    await settle();
+    expect(plain(lastFrame())).not.toContain('enter actions');
+    expect(plain(lastFrame())).toContain('↑↓ · enter');
   });
 
   test('typing a ticket number and Enter views it', async () => {
@@ -140,25 +174,26 @@ describe('MainScreen', () => {
     expect(plain(lastFrame())).toContain('❯ /');
   });
 
-  test('esc clears a typed line, then moves to the tickets, then goes back to the scope picker', async () => {
+  test('esc steps back: clears the prompt, then to the menu, then to the scope picker', async () => {
     tuiStore.setIssues([issue('A2A-1', 'First')]);
     const { actions, calls } = spyActions();
     const { stdin, lastFrame } = render(<MainScreen actions={actions} />);
     await settle();
     stdin.write('abc');
     await settle();
+    expect(plain(lastFrame())).toContain('❯ abc');
     stdin.write(ESC);
     await settle();
-    expect(plain(lastFrame())).not.toContain('abc');
+    expect(plain(lastFrame())).not.toContain('❯ abc');
+    stdin.write(ESC);
+    await settle();
+    expect(plain(lastFrame())).toContain('↑↓ · enter');
+    stdin.write(RIGHT);
+    await settle();
+    stdin.write(ESC);
+    await settle();
+    expect(plain(lastFrame())).toContain('↑↓ · enter');
     expect(calls).toEqual([]);
-    stdin.write(ESC);
-    await settle();
-    expect(plain(lastFrame())).toContain('enter actions');
-    stdin.write(ESC);
-    await settle();
-    expect(plain(lastFrame())).not.toContain('enter actions');
-    tuiStore.setIssues([]);
-    await settle();
     stdin.write(ESC);
     await settle();
     expect(calls).toEqual([{ action: 'goToWelcome', args: [] }]);

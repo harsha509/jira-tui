@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
 import React from 'react';
 import { render } from 'ink';
-import { loadConfig, type JiraConfig } from './config.js';
-import { JiraClient } from './jira/client.js';
+import { loadConfig, projectFromArgs, teamJqlFrom, type JiraConfig } from './config.js';
+import { loadBoard } from './jira/board.js';
+import { JiraClient, SEARCH_MAX } from './jira/client.js';
 import type { Scope } from './jira/jql.js';
 import type { JiraUser } from './jira/types.js';
 import { ISSUE_TYPES, scopeQuery, type TuiActions } from './tui/commands.js';
@@ -40,7 +41,7 @@ async function guarded(what: string, work: () => Promise<void>): Promise<void> {
 }
 
 /** Wires TuiActions to the JIRA client; omitted arguments are asked for with a picker or prompt. */
-function createActions(client: JiraClient, config: JiraConfig, unmount: () => void): TuiActions {
+export function createActions(client: JiraClient, config: JiraConfig, unmount: () => void): TuiActions {
   let quitting = false;
 
   async function loadIssues(query: IssueQuery): Promise<void> {
@@ -48,7 +49,8 @@ function createActions(client: JiraClient, config: JiraConfig, unmount: () => vo
     await guarded(`Loading ${query.label}`, async () => {
       const issues = await client.search(query.jql);
       tuiStore.setIssues(issues);
-      tuiStore.log('result', `${issues.length} issue${issues.length === 1 ? '' : 's'} — ${query.label}`);
+      const capped = issues.length >= SEARCH_MAX ? ` (first ${SEARCH_MAX} only — narrow the query)` : '';
+      tuiStore.log('result', `${issues.length} issue${issues.length === 1 ? '' : 's'} — ${query.label}${capped}`);
     }).catch(() => undefined);
     if (getSnapshot().issuesLoading) tuiStore.setIssuesError('load failed — see transcript');
   }
@@ -60,6 +62,27 @@ function createActions(client: JiraClient, config: JiraConfig, unmount: () => vo
       return;
     }
     await loadIssues(query);
+  }
+
+  /** Board columns decide the list's statuses; a project without a board falls back to status != Done. */
+  async function loadProjectBoard(project: string): Promise<void> {
+    try {
+      const board = await loadBoard(client, project, project === config.project ? config.boardId : null);
+      tuiStore.setBoard(board);
+      if (board) {
+        tuiStore.log('info', `${board.name}: ${board.columns.length} columns`, `Loading: ${board.openStatuses.join(', ')}`);
+      } else {
+        tuiStore.log('warn', `${project} has no board — listing status != Done`);
+      }
+    } catch (err) {
+      tuiStore.setBoard(null);
+      tuiStore.log('warn', `Could not read the board for ${project} — listing status != Done`, describe(err));
+    }
+  }
+
+  /** A freshly loaded list is what the user wants to act on, so the cursor goes there. */
+  function focusTicketsIfAny(): void {
+    if (getSnapshot().issues.length > 0) tuiStore.setMainFocus('issues');
   }
 
   async function currentUser(): Promise<JiraUser> {
@@ -98,18 +121,40 @@ function createActions(client: JiraClient, config: JiraConfig, unmount: () => vo
     return { accountId: pick.id, label: pick.label };
   }
 
+  /** Team scope without JIRA_TEAM: ask once for the emails and keep them for the session. */
+  async function ensureTeam(): Promise<boolean> {
+    if (getSnapshot().teamJql) return true;
+    const typed = await askText({
+      title: 'Who is on your team?',
+      subtitle: 'Comma-separated emails (or a JQL fragment). Set JIRA_TEAM to skip this.',
+      placeholder: 'a@example.com, b@example.com',
+    });
+    const teamJql = teamJqlFrom(typed ?? undefined);
+    if (!teamJql) return false;
+    tuiStore.setProject(getSnapshot().project, teamJql);
+    tuiStore.log('info', 'Team set for this session', `${teamJql}\nExport JIRA_TEAM in your shell to make it permanent.`);
+    return true;
+  }
+
   const actions: TuiActions = {
     async selectScope(scope: Scope) {
-      if (scope === 'team' && !config.teamJql) {
-        tuiStore.setStatusMessage('JIRA_TEAM is not set — export a JQL fragment or comma-separated emails.');
-        return;
-      }
+      if (scope === 'team' && !(await ensureTeam())) return;
       tuiStore.setScope(scope);
       tuiStore.goTo('main');
       await loadIssues(scopeQuery(scope));
+      focusTicketsIfAny();
     },
     loadIssues,
     refresh,
+    async setTeam(spec: string) {
+      const teamJql = teamJqlFrom(spec);
+      if (!teamJql) {
+        tuiStore.setPaletteError('Usage: /team a@x.com,b@x.com  (or a JQL fragment)');
+        return;
+      }
+      tuiStore.setProject(getSnapshot().project, teamJql);
+      tuiStore.log('info', 'Team set for this session', `${teamJql}\nExport JIRA_TEAM in your shell to make it permanent.`);
+    },
     async ticketMenu(key: string) {
       const choice = await askSelect({
         title: key,
@@ -185,9 +230,32 @@ function createActions(client: JiraClient, config: JiraConfig, unmount: () => vo
         if (!pickedType) return;
         const pickedSummary = summary ?? (await askText({ title: `New ${pickedType}`, placeholder: 'Summary' }));
         if (!pickedSummary) return;
-        const created = await client.createIssue({ project: config.project, type: pickedType, summary: pickedSummary });
+        const project = getSnapshot().project;
+        const created = await client.createIssue({ project, type: pickedType, summary: pickedSummary });
         tuiStore.log('result', `Created ${created.key}`, `${pickedType}: ${pickedSummary}\n${client.issueUrl(created.key)}`);
         await refresh();
+      });
+    },
+    async switchProject(key?: string) {
+      await guarded('Switching project', async () => {
+        let target = key;
+        if (!target) {
+          const projects = await client.projects();
+          const pick = await askSelect({
+            title: 'Switch project',
+            subtitle: `${projects.length} projects — type to filter`,
+            items: projects.map((p) => ({ id: p.key, label: p.key, hint: p.name })),
+          });
+          if (!pick) return;
+          target = pick.id;
+        }
+        const project = await client.project(target);
+        tuiStore.setProject(project.key, getSnapshot().teamJql);
+        tuiStore.log('info', `Project: ${project.key} — ${project.name}`);
+        await loadProjectBoard(project.key);
+        tuiStore.goTo('main');
+        await loadIssues(scopeQuery(getSnapshot().scope));
+        focusTicketsIfAny();
       });
     },
     openInBrowser(key: string) {
@@ -212,14 +280,15 @@ function createActions(client: JiraClient, config: JiraConfig, unmount: () => vo
       unmount();
       leaveAltScreen();
     },
+    loadProjectBoard,
   };
   return actions;
 }
 
 async function main(): Promise<void> {
-  const { config, problems } = loadConfig();
+  const { config, problems } = loadConfig(process.env, undefined, { project: projectFromArgs(process.argv.slice(2)) });
   if (!config) {
-    process.stderr.write(`jira-tui cannot start:\n${problems.map((p) => `  - ${p}`).join('\n')}\n`);
+    process.stderr.write(`jira-tui cannot start:\n${problems.map((p) => `  - ${p}`).join('\n')}\nRun: jira-tui doctor\n`);
     process.exit(1);
   }
   const client = new JiraClient(config);
@@ -239,15 +308,18 @@ async function main(): Promise<void> {
       tuiStore.setMe(me);
       tuiStore.setStatusMessage(`${config.server} · signed in as ${me.displayName}`);
     })
-    .catch((err) => tuiStore.setStatusMessage(`JIRA login failed: ${describe(err)}`));
+    .catch((err) => tuiStore.setStatusMessage(`JIRA login failed: ${describe(err)} — run jira-tui doctor`));
+  void actions.loadProjectBoard(config.project);
 
   await instance.waitUntilExit();
   await actions.quit();
   process.exit(0);
 }
 
-void main().catch((err) => {
-  leaveAltScreen();
-  process.stderr.write(`${describe(err)}\n`);
-  process.exit(1);
-});
+if (process.env.JIRA_TUI_NO_MAIN !== '1') {
+  void main().catch((err) => {
+    leaveAltScreen();
+    process.stderr.write(`${describe(err)}\n`);
+    process.exit(1);
+  });
+}

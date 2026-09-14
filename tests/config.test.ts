@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { loadConfig, readJiraCliConfig, teamJqlFrom } from '../src/config.js';
+import { loadConfig, projectFromArgs, readJiraCliConfig, teamJqlFrom } from '../src/config.js';
 
 const SAMPLE_YAML = `auth_type: basic
 board:
@@ -104,6 +104,21 @@ describe('loadConfig', () => {
       boardId: '1',
       teamJql: 'assignee in ("a@y.com")',
     });
+  });
+
+  test('reports where each value came from, and a --project override wins', () => {
+    const { config, sources } = loadConfig({ JIRA_API_TOKEN: 'tok', JIRA_LOGIN: 'x@y.com' }, yamlFile(SAMPLE_YAML), { project: 'ZZ' });
+    expect(config?.project).toBe('ZZ');
+    expect(config?.login).toBe('x@y.com');
+    expect(sources).toEqual({ token: 'env', server: 'jira-cli', login: 'env', project: 'flag', boardId: 'jira-cli', team: 'none' });
+  });
+
+  test('projectFromArgs accepts --project KEY, --project=KEY and -p, upper-casing the key', () => {
+    expect(projectFromArgs(['--project', 'abc'])).toBe('ABC');
+    expect(projectFromArgs(['--project=abc'])).toBe('ABC');
+    expect(projectFromArgs(['-p', 'abc'])).toBe('ABC');
+    expect(projectFromArgs(['--project'])).toBeUndefined();
+    expect(projectFromArgs([])).toBeUndefined();
   });
 
   test('a missing token or config file yields problems and no config', () => {

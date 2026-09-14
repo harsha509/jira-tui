@@ -107,6 +107,18 @@ describe('search', () => {
     expect(calls[1].url).toContain('nextPageToken=abc');
   });
 
+  test('the default cap is 500, fetched in pages of 100', async () => {
+    let page = 0;
+    const { jira, calls } = client(() => {
+      page++;
+      return { body: { issues: Array.from({ length: 100 }, (_, i) => rawIssue(`A2A-${page * 100 + i}`)), isLast: false, nextPageToken: `p${page}` } };
+    });
+    const issues = await jira.search('project = A2A');
+    expect(issues).toHaveLength(500);
+    expect(calls).toHaveLength(5);
+    expect(calls[0].url).toContain('maxResults=100');
+  });
+
   test('stops at max even when more pages exist', async () => {
     const { jira, calls } = client(() => ({
       body: { issues: [rawIssue('A2A-1')], isLast: false, nextPageToken: 'more' },
@@ -214,6 +226,40 @@ describe('issue reads and writes', () => {
     const { jira, calls } = client(() => ({ body: [{ accountId: 'a', displayName: 'A' }] }));
     await expect(jira.assignableUsers('A2A-90')).resolves.toEqual([{ accountId: 'a', displayName: 'A' }]);
     expect(calls[0].url).toBe('https://x.atlassian.net/rest/api/3/user/assignable/search?issueKey=A2A-90&maxResults=100');
+  });
+
+  test('project, projects (paged with startAt), statuses (deduped), boards and board config', async () => {
+    const { jira, calls } = client((url) => {
+      if (url.includes('/project/search?startAt=0')) return { body: { values: [{ key: 'A', name: 'Alpha' }], isLast: false } };
+      if (url.includes('/project/search?startAt=1')) return { body: { values: [{ key: 'B', name: 'Beta', style: 'next-gen' }], isLast: true } };
+      if (url.includes('/project/A2A/statuses'))
+        return {
+          body: [
+            { statuses: [{ id: '1', name: 'To Do', statusCategory: { key: 'new' } }] },
+            { statuses: [{ id: '1', name: 'To Do', statusCategory: { key: 'new' } }, { id: '4', name: 'Done', statusCategory: { key: 'done' } }] },
+          ],
+        };
+      if (url.includes('/rest/api/3/project/A2A')) return { body: { key: 'A2A', name: 'A2A', style: 'next-gen' } };
+      if (url.includes('/rest/agile/1.0/board?')) return { body: { values: [{ id: 4672, name: 'A2A board', type: 'simple' }] } };
+      if (url.includes('/rest/agile/1.0/board/4672/configuration'))
+        return { body: { name: 'A2A board', columnConfig: { columns: [{ name: 'To Do', statuses: [{ id: '1' }, { id: '2' }] }] } } };
+      return { status: 404, body: {} };
+    });
+    await expect(jira.project('A2A')).resolves.toEqual({ key: 'A2A', name: 'A2A', style: 'next-gen' });
+    await expect(jira.projects()).resolves.toEqual([{ key: 'A', name: 'Alpha', style: undefined }, { key: 'B', name: 'Beta', style: 'next-gen' }]);
+    await expect(jira.projectStatuses('A2A')).resolves.toEqual([
+      { id: '1', name: 'To Do', category: 'new' },
+      { id: '4', name: 'Done', category: 'done' },
+    ]);
+    await expect(jira.boardsForProject('A2A')).resolves.toEqual([{ id: 4672, name: 'A2A board', type: 'simple' }]);
+    await expect(jira.boardConfig(4672)).resolves.toEqual({ name: 'A2A board', columns: [{ name: 'To Do', statusIds: ['1', '2'] }] });
+    expect(calls.some((c) => c.url.endsWith('/rest/agile/1.0/board?projectKeyOrId=A2A&maxResults=50'))).toBe(true);
+  });
+
+  test('projects stops on an empty page even if isLast is false', async () => {
+    const { jira, calls } = client(() => ({ body: { values: [], isLast: false } }));
+    await expect(jira.projects()).resolves.toEqual([]);
+    expect(calls).toHaveLength(1);
   });
 
   test('findUsers URL-encodes the query', async () => {

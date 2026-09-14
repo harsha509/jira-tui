@@ -12,15 +12,21 @@ export function escapeJql(text: string): string {
   return text.replace(/["\\]/g, '\\$&');
 }
 
-/** Open (not Done) issues of the project, narrowed to me or the team. */
-export function scopeJql(scope: Scope, project: string, teamJql: string | null): string {
+/** `status in (...)` for the board's open statuses, or `status != Done` when no board is known. */
+export function openStatusClause(openStatuses: string[]): string {
+  if (openStatuses.length === 0) return 'status != Done';
+  return `status in (${openStatuses.map((s) => `"${escapeJql(s)}"`).join(', ')})`;
+}
+
+/** Open issues of the project, narrowed to me or the team. */
+export function scopeJql(scope: Scope, project: string, teamJql: string | null, openStatuses: string[] = []): string {
   const who =
     scope === 'mine'
       ? ' AND assignee = currentUser()'
       : scope === 'team' && teamJql
         ? ` AND (${teamJql})`
         : '';
-  return `project = ${project} AND status != Done${who} ORDER BY updated DESC`;
+  return `project = ${project} AND ${openStatusClause(openStatuses)}${who} ORDER BY updated DESC`;
 }
 
 export function searchJql(project: string, text: string): string {

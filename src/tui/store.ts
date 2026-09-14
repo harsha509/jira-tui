@@ -1,9 +1,12 @@
+import type { BoardInfo } from '../jira/board.js';
 import type { Scope } from '../jira/jql.js';
 import type { Issue, JiraUser } from '../jira/types.js';
 
 export type TuiScreen = 'welcome' | 'main' | 'board';
 
 export type TranscriptKind = 'info' | 'warn' | 'error' | 'command' | 'result';
+
+export type MainFocus = 'menu' | 'issues' | 'prompt';
 
 export interface IssueQuery {
   label: string;
@@ -53,6 +56,8 @@ export interface TuiState {
   screen: TuiScreen;
   project: string;
   teamJql: string | null;
+  /** The project's board, once loaded; drives column order and which statuses count as open. */
+  board: BoardInfo | null;
   me: JiraUser | null;
   scope: Scope;
   query: IssueQuery | null;
@@ -60,6 +65,9 @@ export interface TuiState {
   issuesLoading: boolean;
   issuesError: string | null;
   issuesSelected: number;
+  /** Which main-screen pane owns the keyboard; kept here because dialogs unmount the screen. */
+  mainFocus: MainFocus;
+  menuIndex: number;
   transcript: TranscriptEntry[];
   running: boolean;
   /** Inline feedback under the prompt (e.g. a typo'd command), separate from the transcript. */
@@ -81,6 +89,7 @@ function initial(): TuiState {
     screen: 'welcome',
     project: '',
     teamJql: null,
+    board: null,
     me: null,
     scope: 'mine',
     query: null,
@@ -88,6 +97,8 @@ function initial(): TuiState {
     issuesLoading: false,
     issuesError: null,
     issuesSelected: 0,
+    mainFocus: 'menu',
+    menuIndex: 0,
     transcript: [],
     running: false,
     paletteError: null,
@@ -142,8 +153,13 @@ export const tuiStore = {
   goTo(screen: TuiScreen): void {
     set({ screen });
   },
+  /** Switching project also drops the previous board and list. */
   setProject(project: string, teamJql: string | null): void {
-    set({ project, teamJql });
+    const changed = project !== state.project;
+    set(changed ? { project, teamJql, board: null, query: null, issues: [], issuesSelected: 0 } : { project, teamJql });
+  },
+  setBoard(board: BoardInfo | null): void {
+    set({ board });
   },
   setMe(me: JiraUser | null): void {
     set({ me });
@@ -167,6 +183,12 @@ export const tuiStore = {
   },
   setIssuesSelected(issuesSelected: number): void {
     set({ issuesSelected: Math.max(0, Math.min(issuesSelected, state.issues.length - 1)) });
+  },
+  setMainFocus(mainFocus: MainFocus): void {
+    set({ mainFocus });
+  },
+  setMenuIndex(menuIndex: number): void {
+    set({ menuIndex });
   },
   log(kind: TranscriptKind, text: string, detail?: string): void {
     const entry: TranscriptEntry = { id: nextId++, kind, text, detail, ts: Date.now() };

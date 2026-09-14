@@ -49,11 +49,35 @@ export function transcriptRows(termRows: number, listVisible: boolean, inputLine
   );
 }
 
-export const MIN_MAIN_ROWS =
-  FRAME_ROWS + HEADER_ROWS + STATUS_BAR_ROWS + TRANSCRIPT_CHROME_ROWS + 1 + INPUT_CHROME_ROWS + 1 + MIN_TRANSCRIPT_ROWS;
+/** Menu box: border(2) + title(1). Log box: the same. */
+export const MENU_CHROME_ROWS = 3;
+export const LOG_CHROME_ROWS = 3;
+export const MIN_MENU_ROWS = 3;
+export const MIN_LOG_ROWS = 2;
+
+export interface LeftLayout {
+  /** Menu items shown (the list scrolls when fewer than the item count). */
+  menuVisible: number;
+  /** Log body rows; 0 hides the log box entirely. */
+  logRows: number;
+}
+
+/** Split the left column between the menu, the log and the prompt: the menu first, the log gets the rest. */
+export function leftLayout(termRows: number, itemCount: number, listVisible: boolean, inputLines: number): LeftLayout {
+  const avail = contentRows(termRows) - 1 - paletteRows(termRows, listVisible) - INPUT_CHROME_ROWS - inputLines;
+  const fullMenu = itemCount + MENU_CHROME_ROWS;
+  const logBlock = 1 + LOG_CHROME_ROWS;
+  if (avail >= fullMenu + logBlock + MIN_LOG_ROWS) return { menuVisible: itemCount, logRows: avail - fullMenu - logBlock };
+  if (avail >= MIN_MENU_ROWS + MENU_CHROME_ROWS + logBlock + MIN_LOG_ROWS) {
+    return { menuVisible: avail - MENU_CHROME_ROWS - logBlock - MIN_LOG_ROWS, logRows: MIN_LOG_ROWS };
+  }
+  return { menuVisible: Math.max(1, Math.min(itemCount, avail - MENU_CHROME_ROWS)), logRows: 0 };
+}
+
+export const MIN_MAIN_ROWS = FRAME_ROWS + HEADER_ROWS + STATUS_BAR_ROWS + 1 + INPUT_CHROME_ROWS + 1 + MENU_CHROME_ROWS + 1;
 
 export function inputLineBudget(termRows: number): number {
-  return Math.max(1, Math.min(4, transcriptRows(termRows, false, 1) - MIN_TRANSCRIPT_ROWS + 1));
+  return Math.max(1, Math.min(4, contentRows(termRows) - INPUT_CHROME_ROWS - MENU_CHROME_ROWS - 3));
 }
 
 /** Rows a prompt of `query` wraps to inside a `width`-column box, capped at `max`. */

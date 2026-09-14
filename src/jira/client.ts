@@ -20,6 +20,35 @@ export interface JiraClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface BoardSummary {
+  id: number;
+  name: string;
+  type: string;
+}
+
+export interface BoardColumnConfig {
+  name: string;
+  statusIds: string[];
+}
+
+export interface BoardConfig {
+  name: string;
+  columns: BoardColumnConfig[];
+}
+
+export interface ProjectStatus {
+  id: string;
+  name: string;
+  /** JIRA status category key: new | indeterminate | done. */
+  category: string;
+}
+
+export interface ProjectSummary {
+  key: string;
+  name: string;
+  style?: string;
+}
+
 interface Named {
   name: string;
 }
@@ -62,9 +91,25 @@ interface RawTransition {
   to: Named;
 }
 
+interface RawBoardConfig {
+  name: string;
+  columnConfig: { columns: Array<{ name: string; statuses: Array<{ id: string }> }> };
+}
+
+interface RawProjectStatuses {
+  statuses: Array<{ id: string; name: string; statusCategory?: { key?: string } }>;
+}
+
+interface Paged<T> {
+  values: T[];
+  isLast?: boolean;
+}
+
 const LIST_FIELDS = 'summary,status,assignee,issuetype,priority,updated';
 const DETAIL_FIELDS = `${LIST_FIELDS},reporter,created,description,labels,comment,parent`;
 const PAGE_SIZE = 100;
+/** Default cap for a list; the caller is told when it is hit. */
+export const SEARCH_MAX = 500;
 
 function toIssue(raw: RawIssue): Issue {
   const f = raw.fields;
@@ -105,7 +150,7 @@ async function errorMessages(response: Response): Promise<string[]> {
   }
 }
 
-/** Thin JIRA Cloud REST v3 client authenticated with login + API token. */
+/** Thin JIRA Cloud REST v3 (+ Agile 1.0) client authenticated with login + API token. */
 export class JiraClient {
   private readonly server: string;
   private readonly authHeader: string;
@@ -139,7 +184,7 @@ export class JiraClient {
   }
 
   /** Runs `jql` and follows nextPageToken until `max` issues or the last page. */
-  async search(jql: string, max = PAGE_SIZE): Promise<Issue[]> {
+  async search(jql: string, max = SEARCH_MAX): Promise<Issue[]> {
     const issues: Issue[] = [];
     let nextPageToken: string | undefined;
     do {
@@ -199,5 +244,54 @@ export class JiraClient {
   findUsers(query: string): Promise<JiraUser[]> {
     const params = new URLSearchParams({ query });
     return this.request<JiraUser[]>('GET', `/rest/api/3/user/search?${params}`);
+  }
+
+  async project(key: string): Promise<ProjectSummary> {
+    const raw = await this.request<{ key: string; name: string; style?: string }>('GET', `/rest/api/3/project/${key}`);
+    return { key: raw.key, name: raw.name, style: raw.style };
+  }
+
+  /** Every project visible to the user, paged with startAt up to `max`. */
+  async projects(max = SEARCH_MAX): Promise<ProjectSummary[]> {
+    const out: ProjectSummary[] = [];
+    let isLast = false;
+    while (!isLast && out.length < max) {
+      const params = new URLSearchParams({ startAt: String(out.length), maxResults: String(PAGE_SIZE) });
+      const page = await this.request<Paged<{ key: string; name: string; style?: string }>>(
+        'GET',
+        `/rest/api/3/project/search?${params}`
+      );
+      if (page.values.length === 0) break;
+      out.push(...page.values.map((p) => ({ key: p.key, name: p.name, style: p.style })));
+      isLast = page.isLast ?? true;
+    }
+    return out;
+  }
+
+  /** Distinct statuses across the project's issue types, with their category. */
+  async projectStatuses(project: string): Promise<ProjectStatus[]> {
+    const raw = await this.request<RawProjectStatuses[]>('GET', `/rest/api/3/project/${project}/statuses`);
+    const byId = new Map<string, ProjectStatus>();
+    for (const type of raw) {
+      for (const s of type.statuses) {
+        if (!byId.has(s.id)) byId.set(s.id, { id: s.id, name: s.name, category: s.statusCategory?.key ?? 'indeterminate' });
+      }
+    }
+    return [...byId.values()];
+  }
+
+  async boardsForProject(project: string): Promise<BoardSummary[]> {
+    const params = new URLSearchParams({ projectKeyOrId: project, maxResults: '50' });
+    const page = await this.request<Paged<BoardSummary>>('GET', `/rest/agile/1.0/board?${params}`);
+    return page.values.map((b) => ({ id: b.id, name: b.name, type: b.type }));
+  }
+
+  /** Column names and the status ids mapped to each, in the board's displayed order. */
+  async boardConfig(boardId: number): Promise<BoardConfig> {
+    const raw = await this.request<RawBoardConfig>('GET', `/rest/agile/1.0/board/${boardId}/configuration`);
+    return {
+      name: raw.name,
+      columns: raw.columnConfig.columns.map((c) => ({ name: c.name, statusIds: c.statuses.map((s) => s.id) })),
+    };
   }
 }

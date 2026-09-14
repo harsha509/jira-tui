@@ -1,6 +1,7 @@
+import type { BoardColumn } from '../jira/board.js';
 import type { Issue, IssueDetail, Transition } from '../jira/types.js';
 
-/** Board column order; unknown statuses sort after these. */
+/** Fallback column order when no board is known; unknown statuses sort after these. */
 export const STATUS_ORDER = [
   'To Do',
   'In Dev',
@@ -21,12 +22,12 @@ export interface BoardGroup {
   issues: Issue[];
 }
 
-export function statusRank(status: string): number {
-  const index = STATUS_ORDER.findIndex((s) => s.toLowerCase() === status.toLowerCase());
-  return index === -1 ? STATUS_ORDER.length : index;
+export function statusRank(status: string, order: string[] = STATUS_ORDER): number {
+  const index = order.findIndex((s) => s.toLowerCase() === status.toLowerCase());
+  return index === -1 ? order.length : index;
 }
 
-export function groupByStatus(issues: Issue[]): BoardGroup[] {
+export function groupByStatus(issues: Issue[], order: string[] = STATUS_ORDER): BoardGroup[] {
   const groups = new Map<string, BoardGroup>();
   for (const issue of issues) {
     const id = issue.status.toLowerCase();
@@ -35,8 +36,22 @@ export function groupByStatus(issues: Issue[]): BoardGroup[] {
     groups.set(id, group);
   }
   return [...groups.values()].sort(
-    (a, b) => statusRank(a.status) - statusRank(b.status) || a.status.localeCompare(b.status)
+    (a, b) => statusRank(a.status, order) - statusRank(b.status, order) || a.status.localeCompare(b.status)
   );
+}
+
+/** One group per board column (empty ones included, in board order); issues in no column are grouped by status after. */
+export function boardGroups(issues: Issue[], columns: BoardColumn[]): BoardGroup[] {
+  const groups = columns.map((c) => ({ status: c.name, issues: [] as Issue[] }));
+  const columnOf = new Map<string, BoardGroup>();
+  columns.forEach((c, i) => c.statuses.forEach((s) => columnOf.set(s.toLowerCase(), groups[i])));
+  const leftovers: Issue[] = [];
+  for (const issue of issues) {
+    const group = columnOf.get(issue.status.toLowerCase());
+    if (group) group.issues.push(issue);
+    else leftovers.push(issue);
+  }
+  return [...groups, ...groupByStatus(leftovers)];
 }
 
 export function truncate(text: string, width: number): string {

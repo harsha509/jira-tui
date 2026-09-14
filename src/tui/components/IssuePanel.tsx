@@ -37,7 +37,7 @@ export function IssuePanel({ issues, label, loading, error, selected, focused, w
           Issues
         </Text>
         <Text color={COLORS.dimmed} wrap="truncate">
-          {focused ? '↑↓ · enter actions · esc back' : issues.length > 0 ? '⇧tab to select' : ''}
+          {focused ? '↑↓ · enter actions · ← menu' : issues.length > 0 ? '→ to select' : ''}
         </Text>
       </Box>
       <Text color={COLORS.dimmed} wrap="truncate">

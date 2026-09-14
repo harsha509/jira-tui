@@ -16,6 +16,12 @@ export interface TuiActions {
   assignIssue(key: string, who?: string): Promise<void>;
   commentIssue(key: string, text?: string): Promise<void>;
   createIssue(type?: string, summary?: string): Promise<void>;
+  /** Switch to another project (reloads its board and list); omitted key opens a project picker. */
+  switchProject(key?: string): Promise<void>;
+  /** Read the project's board columns into the store (decides list statuses and board order). */
+  loadProjectBoard(project: string): Promise<void>;
+  /** `/team a@x,b@x` — set who "team open tickets" means for this session. */
+  setTeam(spec: string): Promise<void>;
   openInBrowser(key: string): void;
   goToBoard(): void;
   goToMain(): void;
@@ -33,9 +39,10 @@ export interface PaletteCommand {
 
 export const ISSUE_TYPES = ['Bug', 'Task', 'Story', 'Epic', 'Feature', 'Subtask'];
 
+/** Scope → query, restricted to the board's open statuses once the board is known. */
 export function scopeQuery(scope: Scope): IssueQuery {
-  const { project, teamJql } = getSnapshot();
-  return { label: SCOPE_LABELS[scope], jql: scopeJql(scope, project, teamJql) };
+  const { project, teamJql, board } = getSnapshot();
+  return { label: SCOPE_LABELS[scope], jql: scopeJql(scope, project, teamJql, board?.openStatuses ?? []) };
 }
 
 function isScope(value: string): value is Scope {
@@ -196,6 +203,34 @@ export const COMMANDS: PaletteCommand[] = [
         return;
       }
       actions.openInBrowser(parsed.key);
+    },
+  },
+  {
+    id: 'project',
+    name: '/project',
+    aliases: ['/proj'],
+    summary: 'Switch project: /project KEY — no key opens a picker',
+    run: (actions, args) => {
+      const key = args.trim().toUpperCase();
+      if (key && !/^[A-Z][A-Z0-9_]*$/.test(key)) {
+        tuiStore.setPaletteError('Usage: /project [KEY]');
+        return;
+      }
+      return actions.switchProject(key || undefined);
+    },
+  },
+  {
+    id: 'team',
+    name: '/team',
+    summary: 'Set the team for this session: /team a@x.com,b@x.com (or a JQL fragment)',
+    run: (actions, args) => {
+      const spec = args.trim();
+      if (!spec) {
+        const current = getSnapshot().teamJql;
+        tuiStore.log('info', current ? `Team: ${current}` : 'No team set', 'Usage: /team a@x.com,b@x.com — or export JIRA_TEAM');
+        return;
+      }
+      return actions.setTeam(spec);
     },
   },
   {

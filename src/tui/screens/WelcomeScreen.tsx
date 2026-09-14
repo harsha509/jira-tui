@@ -23,6 +23,10 @@ export function WelcomeScreen({ actions }: WelcomeScreenProps) {
       void actions.quit();
       return;
     }
+    if (input === 'p' && !key.ctrl && !key.meta) {
+      void actions.switchProject();
+      return;
+    }
     if (key.upArrow) setIndex((i) => (i > 0 ? i - 1 : SCOPES.length - 1));
     else if (key.downArrow) setIndex((i) => (i < SCOPES.length - 1 ? i + 1 : 0));
     else if (key.return) void actions.selectScope(SCOPES[index]);
@@ -48,7 +52,8 @@ export function WelcomeScreen({ actions }: WelcomeScreenProps) {
         <Wordmark />
         <Box marginTop={1}>
           <Text color={COLORS.dimmed}>
-            {ui.project} {symbols.dot} {ui.me ? ui.me.displayName : 'connecting…'}
+            {ui.project} {symbols.dot} {ui.board ? ui.board.name : 'looking up board…'} {symbols.dot}{' '}
+            {ui.me ? ui.me.displayName : 'connecting…'}
           </Text>
         </Box>
         <Box marginTop={2}>
@@ -65,7 +70,7 @@ export function WelcomeScreen({ actions }: WelcomeScreenProps) {
           ))}
         </Box>
       </Box>
-      <StatusBar breadcrumb="Welcome" hints={['↑↓ select', 'enter confirm', 'q quit']} message={ui.statusMessage} />
+      <StatusBar breadcrumb="Welcome" hints={['↑↓ select', 'enter confirm', 'p project', 'q quit']} message={ui.statusMessage} />
     </Box>
   );
 }

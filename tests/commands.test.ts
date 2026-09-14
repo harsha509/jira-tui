@@ -183,6 +183,34 @@ describe('slash commands', () => {
     ]);
   });
 
+  test('/list uses the board statuses once a board is known', async () => {
+    tuiStore.setBoard({ id: 1, name: 'B', columns: [], openStatuses: ['To Do', 'In Dev'] });
+    const { actions, calls } = spyActions();
+    await executeLine('/list all', actions);
+    expect((calls[0].args[0] as { jql: string }).jql).toBe('project = A2A AND status in ("To Do", "In Dev") ORDER BY updated DESC');
+  });
+
+  test('/project switches by key, opens a picker without one, and rejects junk', async () => {
+    const { actions, calls } = spyActions();
+    await executeLine('/project abc', actions);
+    await executeLine('/project', actions);
+    await executeLine('/project a b', actions);
+    expect(calls).toEqual([
+      { action: 'switchProject', args: ['ABC'] },
+      { action: 'switchProject', args: [undefined] },
+    ]);
+    expect(getSnapshot().paletteError).toBe('Usage: /project [KEY]');
+  });
+
+  test('/team sets the team for the session; bare /team reports it', async () => {
+    const { actions, calls } = spyActions();
+    await executeLine('/team a@x.com, b@x.com', actions);
+    expect(calls).toEqual([{ action: 'setTeam', args: ['a@x.com, b@x.com'] }]);
+    await executeLine('/team', actions);
+    expect(calls).toHaveLength(1);
+    expect(getSnapshot().transcript.at(-1)?.text).toBe('No team set');
+  });
+
   test('/list with a bad scope is a usage error', async () => {
     const { actions, calls } = spyActions();
     await executeLine('/list nope', actions);
@@ -253,7 +281,7 @@ describe('completion', () => {
 
   test('matchCommands filters by name or alias prefix', () => {
     expect(matchCommands('/c').map((c) => c.name)).toEqual(['/comment', '/create', '/clear-log']);
-    expect(matchCommands('/t').map((c) => c.name)).toEqual(['/ticket']);
+    expect(matchCommands('/t').map((c) => c.name)).toEqual(['/ticket', '/team']);
     expect(matchCommands('/ls').map((c) => c.name)).toEqual(['/list']);
     expect(matchCommands('/').length).toBeGreaterThan(10);
   });
