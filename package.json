@@ -1,0 +1,44 @@
+{
+  "name": "jira-tui",
+  "version": "0.0.1-beta",
+  "description": "Terminal Studio-style TUI for JIRA, built with Ink",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harsha509/jira-tui.git"
+  },
+  "homepage": "https://github.com/harsha509/jira-tui#readme",
+  "type": "module",
+  "bin": {
+    "jira-tui": "bin/jira-tui.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/index.ts",
+    "test": "vitest run",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "ink": "^5.2.1",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.31",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
