@@ -14,8 +14,6 @@ export interface FilterItem {
   count?: number;
   /** The currently applied scope or status filter. */
   active?: boolean;
-  /** After running, hand the cursor to the ticket pane when it has rows. */
-  focusTickets?: boolean;
   run?: (actions: TuiActions) => Promise<void> | void;
 }
 
@@ -34,7 +32,6 @@ const ACTIONS: FilterItem[] = [
     id: 'search',
     kind: 'action',
     label: 'Search tickets…',
-    focusTickets: true,
     run: async (actions) => {
       const text = await askText({ title: 'Search tickets', placeholder: 'words in the summary' });
       if (!text) return;
@@ -58,7 +55,7 @@ const ACTIONS: FilterItem[] = [
     },
   },
   { id: 'board', kind: 'action', label: 'Board view', run: (actions) => actions.goToBoard() },
-  { id: 'project', kind: 'action', label: 'Switch project…', focusTickets: true, run: (actions) => actions.switchProject() },
+  { id: 'project', kind: 'action', label: 'Switch project…', run: (actions) => actions.switchProject() },
   { id: 'help', kind: 'action', label: 'Help', run: (actions) => COMMANDS.find((c) => c.id === 'help')!.run(actions, '') },
   { id: 'quit', kind: 'action', label: 'Quit', run: (actions) => actions.quit() },
 ];
@@ -83,7 +80,6 @@ function statusItems(state: TuiState): FilterItem[] {
       label: ALL_STATUSES,
       count: state.issues.length,
       active: state.statusFilter === null,
-      focusTickets: true,
       run: () => tuiStore.setStatusFilter(null),
     },
     ...groups.map((g) => ({
@@ -92,7 +88,6 @@ function statusItems(state: TuiState): FilterItem[] {
       label: g.name,
       count: countIn(state, g.statuses),
       active: state.statusFilter?.toLowerCase() === g.name.toLowerCase(),
-      focusTickets: true,
       run: () => tuiStore.setStatusFilter(g.name),
     })),
   ];
@@ -109,7 +104,6 @@ export function buildFilterItems(state: TuiState): FilterItem[] {
       label: SCOPE_TITLES[scope],
       count: scopeLoaded(scope) ? state.issues.length : undefined,
       active: scopeLoaded(scope),
-      focusTickets: true,
       run: async (actions: TuiActions) => {
         tuiStore.setStatusFilter(null);
         await actions.selectScope(scope);

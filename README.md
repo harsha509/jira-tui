@@ -106,7 +106,7 @@ Filters (pick once)              Tickets (act here)
     Create ticket…
 ```
 
-**Filters (left).** `↑↓` move the `❯` cursor, `enter` applies: a **scope** reloads the list from JIRA; a **status** (one row per board column, with live counts) narrows the loaded list instantly; the **actions** below create, search, open a ticket by number, switch project, show the board, help, quit. Applying a scope or status hands the cursor to the tickets.
+**Filters (left).** `↑↓` move the `❯` cursor, `enter` applies: a **scope** reloads the list from JIRA; a **status** (one row per board column, with live counts) narrows the loaded list instantly; the **actions** below create, search, open a ticket by number, switch project, show the board, help, quit. The cursor stays on the filters; press `→` (or `⇧tab`) to move it to the tickets.
 
 **Tickets (right).** `↑↓` select; the strip underneath shows the selected ticket's type, priority, status, assignee and age. `enter` opens the ticket's action menu (view / move status / assign / comment / open in browser), or press a letter directly:
 

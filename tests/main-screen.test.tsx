@@ -61,7 +61,7 @@ describe('MainScreen', () => {
     expect(frame).toContain('Select a ticket to see its details here.');
   });
 
-  test('↑↓ move the cursor over selectable rows and Enter applies a filter, then the cursor moves to the tickets', async () => {
+  test('↑↓ move the cursor over selectable rows and Enter applies a filter while the cursor stays on the filters', async () => {
     tuiStore.setIssuesLoading({ label: 'all open tickets', jql: 'x' });
     tuiStore.setIssues([issue('A2A-1', 'First'), issue('A2A-2', 'Second')]);
     const { actions, calls } = spyActions();
@@ -81,9 +81,13 @@ describe('MainScreen', () => {
     stdin.write(ENTER);
     await settle();
     expect(calls).toEqual([]);
-    expect(plain(lastFrame())).toContain('enter actions');
     expect(plain(lastFrame())).toContain('all open tickets · In Dev · 2 tickets');
     expect(plain(lastFrame())).toContain('A2A-1');
+    expect(plain(lastFrame())).toContain('❯ ● In Dev');
+    expect(plain(lastFrame())).not.toContain('↑↓ · enter actions');
+    stdin.write(RIGHT);
+    await settle();
+    expect(plain(lastFrame())).toContain('↑↓ · enter actions');
   });
 
   test('→ moves into the tickets and ← comes back to the filters; the detail strip follows the cursor', async () => {

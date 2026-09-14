@@ -71,7 +71,7 @@ export function MainScreen({ actions }: MainScreenProps) {
     setValue(next === 0 ? draftRef.current : history[history.length - next]);
   }
 
-  /** Run the filter under the cursor; when it produced rows on the right, the cursor goes there. */
+  /** Run the filter under the cursor; the cursor stays on the left until → or ⇧tab moves it. */
   async function runFilter(index: number): Promise<void> {
     const item = items[index];
     if (!item?.run || ui.running) return;
@@ -83,7 +83,6 @@ export function MainScreen({ actions }: MainScreenProps) {
     } finally {
       tuiStore.setRunning(false);
     }
-    if (item.focusTickets && visibleIssues().length > 0 && getSnapshot().screen === 'main') setFocus('issues');
   }
 
   /** Bare-letter shortcuts while the ticket list has focus. */

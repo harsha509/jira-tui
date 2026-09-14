@@ -88,7 +88,6 @@ describe('buildFilterItems', () => {
     await mine.run!(actions);
     expect(calls).toEqual([{ action: 'selectScope', args: ['mine'] }]);
     expect(getSnapshot().statusFilter).toBeNull();
-    expect(mine.focusTickets).toBe(true);
   });
 
   test('a status row narrows the visible tickets by column and is marked active', () => {

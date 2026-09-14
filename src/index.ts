@@ -80,11 +80,6 @@ export function createActions(client: JiraClient, config: JiraConfig, unmount: (
     }
   }
 
-  /** A freshly loaded list is what the user wants to act on, so the cursor goes there. */
-  function focusTicketsIfAny(): void {
-    if (getSnapshot().issues.length > 0) tuiStore.setMainFocus('issues');
-  }
-
   async function currentUser(): Promise<JiraUser> {
     const me = getSnapshot().me ?? (await client.me());
     tuiStore.setMe(me);
@@ -142,7 +137,6 @@ export function createActions(client: JiraClient, config: JiraConfig, unmount: (
       tuiStore.setScope(scope);
       tuiStore.goTo('main');
       await loadIssues(scopeQuery(scope));
-      focusTicketsIfAny();
     },
     loadIssues,
     refresh,
@@ -255,7 +249,6 @@ export function createActions(client: JiraClient, config: JiraConfig, unmount: (
         await loadProjectBoard(project.key);
         tuiStore.goTo('main');
         await loadIssues(scopeQuery(getSnapshot().scope));
-        focusTicketsIfAny();
       });
     },
     openInBrowser(key: string) {
