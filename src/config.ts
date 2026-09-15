@@ -63,6 +63,26 @@ export function teamJqlFrom(raw: string | undefined): string | null {
   return emails.length ? `assignee in (${emails.join(',')})` : null;
 }
 
+/** Inverse of teamJqlFrom: the emails behind an assignee clause, or the fragment unchanged. */
+export function teamSpecFrom(teamJql: string | null): string {
+  const inner = teamJql?.match(/^assignee in \((.*)\)$/)?.[1];
+  if (inner === undefined) return teamJql ?? '';
+  return inner
+    .split(',')
+    .map((e) => e.trim().replace(/^"|"$/g, ''))
+    .join(', ');
+}
+
+const EMAIL = /^[^\s"'()]+@[^\s"'()]+$/;
+
+/** The addresses in a team spec, lowercased; empty for a JQL fragment that is not a plain list. */
+export function teamEmailsFrom(teamJql: string | null): string[] {
+  return teamSpecFrom(teamJql)
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => EMAIL.test(e));
+}
+
 /** `--project KEY` or `--project=KEY` from the command line. */
 export function projectFromArgs(argv: string[]): string | undefined {
   for (let i = 0; i < argv.length; i++) {

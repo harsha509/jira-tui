@@ -67,6 +67,7 @@ describe('buildFilterItems', () => {
       'action:Open a ticket…',
       'action:Board view',
       'action:Switch project…',
+      'action:Team…',
       'action:Help',
       'action:Quit',
     ]);
@@ -138,10 +139,16 @@ describe('buildFilterItems', () => {
 
   test('the other actions map straight to TuiActions', async () => {
     const { actions, calls } = spyActions();
-    for (const id of ['create', 'board', 'project', 'quit']) {
+    for (const id of ['create', 'board', 'project', 'team', 'quit']) {
       await buildFilterItems(getSnapshot()).find((i) => i.id === id)!.run!(actions);
     }
-    expect(calls.map((c) => c.action)).toEqual(['createIssue', 'goToBoard', 'switchProject', 'quit']);
+    expect(calls).toEqual([
+      { action: 'createIssue', args: [] },
+      { action: 'goToBoard', args: [] },
+      { action: 'switchProject', args: [] },
+      { action: 'setTeam', args: [] },
+      { action: 'quit', args: [] },
+    ]);
   });
 });
 

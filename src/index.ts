@@ -1,11 +1,12 @@
 import { execFile } from 'node:child_process';
 import React from 'react';
 import { render } from 'ink';
-import { loadConfig, projectFromArgs, teamJqlFrom, type JiraConfig } from './config.js';
+import { loadConfig, projectFromArgs, teamEmailsFrom, teamJqlFrom, teamSpecFrom, type JiraConfig } from './config.js';
 import { loadBoard } from './jira/board.js';
 import { JiraClient, SEARCH_MAX } from './jira/client.js';
-import type { Scope } from './jira/jql.js';
+import { SCOPE_LABELS, type Scope } from './jira/jql.js';
 import type { JiraUser } from './jira/types.js';
+import { assigneeItems } from './tui/assignee.js';
 import { ISSUE_TYPES, scopeQuery, type TuiActions } from './tui/commands.js';
 import { issueDetailLines, matchTransition } from './tui/issue-format.js';
 import { askSelect, askText } from './tui/modal.js';
@@ -43,6 +44,7 @@ async function guarded(what: string, work: () => Promise<void>): Promise<void> {
 /** Wires TuiActions to the JIRA client; omitted arguments are asked for with a picker or prompt. */
 export function createActions(client: JiraClient, config: JiraConfig, unmount: () => void): TuiActions {
   let quitting = false;
+  const accountIdByEmail = new Map<string, string | null>();
 
   async function loadIssues(query: IssueQuery): Promise<void> {
     tuiStore.setIssuesLoading(query);
@@ -100,35 +102,56 @@ export function createActions(client: JiraClient, config: JiraConfig, unmount: (
     return { accountId: user.accountId, label: user.displayName };
   }
 
+  /** Team emails resolved to accountIds, one lookup per email per session; unresolvable emails resolve to null. */
+  async function teamAccountIds(): Promise<Set<string>> {
+    const ids = new Set<string>();
+    for (const email of teamEmailsFrom(getSnapshot().teamJql)) {
+      if (!accountIdByEmail.has(email)) {
+        const found = await client.findUsers(email).catch(() => [] as JiraUser[]);
+        const match = found.find((u) => u.emailAddress?.toLowerCase() === email) ?? (found.length === 1 ? found[0] : undefined);
+        accountIdByEmail.set(email, match?.accountId ?? null);
+      }
+      const id = accountIdByEmail.get(email);
+      if (id) ids.add(id);
+    }
+    return ids;
+  }
+
   async function pickAssignee(key: string): Promise<{ accountId: string | null; label: string } | null> {
     const users = await client.assignableUsers(key);
     const pick = await askSelect({
       title: `Assign ${key}`,
       subtitle: summaryOf(key),
-      items: [
-        { id: 'me', label: 'me', hint: config.login },
-        { id: 'none', label: 'unassign' },
-        ...users.map((u) => ({ id: u.accountId, label: u.displayName, hint: u.emailAddress || undefined })),
-      ],
+      items: assigneeItems(users, await teamAccountIds(), getSnapshot().project, config.login),
     });
     if (!pick) return null;
     if (pick.id === 'me' || pick.id === 'none') return resolveAssignee(pick.id);
     return { accountId: pick.id, label: pick.label };
   }
 
-  /** Team scope without JIRA_TEAM: ask once for the emails and keep them for the session. */
-  async function ensureTeam(): Promise<boolean> {
-    if (getSnapshot().teamJql) return true;
+  /** Keep the team for the session, reloading the list when team tickets are on screen. */
+  async function applyTeam(teamJql: string | null): Promise<boolean> {
+    if (!teamJql) return false;
+    tuiStore.setProject(getSnapshot().project, teamJql);
+    tuiStore.log('info', 'Team set for this session', `${teamJql}\nExport JIRA_TEAM in your shell to make it permanent.`);
+    if (getSnapshot().query?.label === SCOPE_LABELS.team) await loadIssues(scopeQuery('team'));
+    return true;
+  }
+
+  /** The team prompt, prefilled with the current emails so they can be edited or added to. */
+  async function promptTeam(): Promise<boolean> {
     const typed = await askText({
       title: 'Who is on your team?',
       subtitle: 'Comma-separated emails (or a JQL fragment). Set JIRA_TEAM to skip this.',
       placeholder: 'a@example.com, b@example.com',
+      initial: teamSpecFrom(getSnapshot().teamJql),
     });
-    const teamJql = teamJqlFrom(typed ?? undefined);
-    if (!teamJql) return false;
-    tuiStore.setProject(getSnapshot().project, teamJql);
-    tuiStore.log('info', 'Team set for this session', `${teamJql}\nExport JIRA_TEAM in your shell to make it permanent.`);
-    return true;
+    return applyTeam(teamJqlFrom(typed ?? undefined));
+  }
+
+  /** Team scope without JIRA_TEAM: ask once for the emails and keep them for the session. */
+  async function ensureTeam(): Promise<boolean> {
+    return getSnapshot().teamJql ? true : promptTeam();
   }
 
   const actions: TuiActions = {
@@ -140,14 +163,17 @@ export function createActions(client: JiraClient, config: JiraConfig, unmount: (
     },
     loadIssues,
     refresh,
-    async setTeam(spec: string) {
+    async setTeam(spec?: string) {
+      if (spec === undefined) {
+        await promptTeam();
+        return;
+      }
       const teamJql = teamJqlFrom(spec);
       if (!teamJql) {
         tuiStore.setPaletteError('Usage: /team a@x.com,b@x.com  (or a JQL fragment)');
         return;
       }
-      tuiStore.setProject(getSnapshot().project, teamJql);
-      tuiStore.log('info', 'Team set for this session', `${teamJql}\nExport JIRA_TEAM in your shell to make it permanent.`);
+      await applyTeam(teamJql);
     },
     async ticketMenu(key: string) {
       const choice = await askSelect({

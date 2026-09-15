@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { loadConfig, projectFromArgs, readJiraCliConfig, teamJqlFrom } from '../src/config.js';
+import { loadConfig, projectFromArgs, readJiraCliConfig, teamEmailsFrom, teamJqlFrom, teamSpecFrom } from '../src/config.js';
 
 const SAMPLE_YAML = `auth_type: basic
 board:
@@ -60,6 +60,33 @@ describe('teamJqlFrom', () => {
     expect(teamJqlFrom(undefined)).toBeNull();
     expect(teamJqlFrom('   ')).toBeNull();
     expect(teamJqlFrom(',')).toBeNull();
+  });
+});
+
+describe('teamSpecFrom', () => {
+  test('an assignee clause round-trips back to editable emails', () => {
+    expect(teamSpecFrom('assignee in ("a@x.com","b@x.com")')).toBe('a@x.com, b@x.com');
+    expect(teamJqlFrom(teamSpecFrom(teamJqlFrom('a@x.com,b@x.com')))).toBe('assignee in ("a@x.com","b@x.com")');
+  });
+
+  test('any other fragment is offered for editing unchanged', () => {
+    expect(teamSpecFrom('assignee in membersOf("dev") AND labels = a2a')).toBe('assignee in membersOf("dev") AND labels = a2a');
+  });
+
+  test('no team is an empty prompt', () => {
+    expect(teamSpecFrom(null)).toBe('');
+  });
+});
+
+describe('teamEmailsFrom', () => {
+  test('the addresses of an assignee clause, lowercased', () => {
+    expect(teamEmailsFrom('assignee in ("A@x.com","b@x.com")')).toEqual(['a@x.com', 'b@x.com']);
+  });
+
+  test('a fragment that is not a plain list yields nothing, even when it contains an address', () => {
+    expect(teamEmailsFrom('assignee in ("a@x.com") AND labels = a2a')).toEqual([]);
+    expect(teamEmailsFrom('assignee in membersOf("dev")')).toEqual([]);
+    expect(teamEmailsFrom(null)).toEqual([]);
   });
 });
 

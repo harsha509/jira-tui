@@ -12,6 +12,7 @@ const ANSI = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g');
 const ESC = String.fromCharCode(27);
 const ENTER = '\r';
 const DOWN = `${ESC}[B`;
+const UP = `${ESC}[A`;
 const BACKSPACE = String.fromCharCode(127);
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
 const plain = (frame: string | undefined) => (frame ?? '').replace(ANSI, '');
@@ -20,6 +21,14 @@ const ITEMS: SelectItem[] = [
   { id: 'todo', label: 'To Do' },
   { id: 'review', label: 'IN Review', hint: 'via Dev Done' },
   { id: 'done', label: 'Done' },
+];
+
+const GROUPED: SelectItem[] = [
+  { id: 'me', label: 'me' },
+  { id: 'sep:team', label: 'Team', separator: true },
+  { id: 'a1', label: 'Asha R', hint: 'a@x.com' },
+  { id: 'sep:all', label: 'Everyone in A2A', separator: true },
+  { id: 'c1', label: 'Chandra M', hint: 'c@x.com' },
 ];
 
 beforeEach(() => tuiStore.reset());
@@ -31,6 +40,12 @@ describe('filterItems', () => {
     expect(filterItems(ITEMS, 'DO').map((i) => i.id)).toEqual(['todo', 'review', 'done']);
     expect(filterItems(ITEMS, '')).toBe(ITEMS);
     expect(filterItems(ITEMS, 'zzz')).toEqual([]);
+  });
+
+  test('separators drop out as soon as there is a filter, even when they match it', () => {
+    expect(filterItems(GROUPED, 'team')).toEqual([]);
+    expect(filterItems(GROUPED, 'a').map((i) => i.id)).toEqual(['a1', 'c1']);
+    expect(filterItems(GROUPED, '')).toBe(GROUPED);
   });
 });
 
@@ -71,6 +86,47 @@ describe('SelectDialog', () => {
     stdin.write(ESC);
     await settle();
     expect(cancelled).toBe(1);
+  });
+
+  test('arrows step over separators and Enter never selects one', async () => {
+    const picked: SelectItem[] = [];
+    const { stdin } = render(<SelectDialog title="Assign" items={GROUPED} onSelect={(i) => picked.push(i)} onCancel={() => {}} />);
+    await settle();
+    stdin.write(DOWN);
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    stdin.write(DOWN);
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    expect(picked.map((i) => i.id)).toEqual(['a1', 'c1']);
+  });
+
+  test('a leading separator is never the selection, and Up off the top stays put', async () => {
+    const picked: SelectItem[] = [];
+    const items: SelectItem[] = [{ id: 'sep', label: 'Team', separator: true }, ...ITEMS];
+    const { stdin } = render(<SelectDialog title="Assign" items={items} onSelect={(i) => picked.push(i)} onCancel={() => {}} />);
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    stdin.write(UP);
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    expect(picked.map((i) => i.id)).toEqual(['todo', 'todo']);
+  });
+
+  test('a list of nothing but separators selects nothing', async () => {
+    const picked: SelectItem[] = [];
+    const items: SelectItem[] = [{ id: 'a', label: 'Team', separator: true }, { id: 'b', label: 'Rest', separator: true }];
+    const { stdin } = render(<SelectDialog title="Assign" items={items} onSelect={(i) => picked.push(i)} onCancel={() => {}} />);
+    await settle();
+    stdin.write(DOWN);
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    expect(picked).toEqual([]);
   });
 
   test('Enter on an empty filter result selects nothing', async () => {

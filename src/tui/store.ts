@@ -30,6 +30,8 @@ export interface SelectItem {
   id: string;
   label: string;
   hint?: string;
+  /** A dim group heading: rendered as a rule, never selectable, dropped while filtering. */
+  separator?: boolean;
 }
 
 /** A blocking question rendered in place of the active screen; see modal.ts for the promise wrappers. */

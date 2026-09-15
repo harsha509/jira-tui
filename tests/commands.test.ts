@@ -202,13 +202,14 @@ describe('slash commands', () => {
     expect(getSnapshot().paletteError).toBe('Usage: /project [KEY]');
   });
 
-  test('/team sets the team for the session; bare /team reports it', async () => {
+  test('/team sets the team for the session; bare /team opens the prompt to edit it', async () => {
     const { actions, calls } = spyActions();
     await executeLine('/team a@x.com, b@x.com', actions);
-    expect(calls).toEqual([{ action: 'setTeam', args: ['a@x.com, b@x.com'] }]);
     await executeLine('/team', actions);
-    expect(calls).toHaveLength(1);
-    expect(getSnapshot().transcript.at(-1)?.text).toBe('No team set');
+    expect(calls).toEqual([
+      { action: 'setTeam', args: ['a@x.com, b@x.com'] },
+      { action: 'setTeam', args: [undefined] },
+    ]);
   });
 
   test('/list with a bad scope is a usage error', async () => {

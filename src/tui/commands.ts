@@ -20,8 +20,8 @@ export interface TuiActions {
   switchProject(key?: string): Promise<void>;
   /** Read the project's board columns into the store (decides list statuses and board order). */
   loadProjectBoard(project: string): Promise<void>;
-  /** `/team a@x,b@x` — set who "team open tickets" means for this session. */
-  setTeam(spec: string): Promise<void>;
+  /** `/team a@x,b@x` — set who "team open tickets" means for this session; omitted opens the prompt. */
+  setTeam(spec?: string): Promise<void>;
   openInBrowser(key: string): void;
   goToBoard(): void;
   goToMain(): void;
@@ -228,15 +228,10 @@ export const COMMANDS: PaletteCommand[] = [
   {
     id: 'team',
     name: '/team',
-    summary: 'Set the team for this session: /team a@x.com,b@x.com (or a JQL fragment)',
+    summary: 'Set or edit the team for this session: /team [a@x.com,b@x.com]',
     run: (actions, args) => {
       const spec = args.trim();
-      if (!spec) {
-        const current = getSnapshot().teamJql;
-        tuiStore.log('info', current ? `Team: ${current}` : 'No team set', 'Usage: /team a@x.com,b@x.com — or export JIRA_TEAM');
-        return;
-      }
-      return actions.setTeam(spec);
+      return actions.setTeam(spec || undefined);
     },
   },
   {

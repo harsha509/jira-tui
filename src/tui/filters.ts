@@ -54,6 +54,7 @@ const ACTIONS: FilterItem[] = [
   },
   { id: 'board', kind: 'action', label: 'Board view', run: (actions) => actions.goToBoard() },
   { id: 'project', kind: 'action', label: 'Switch project…', run: (actions) => actions.switchProject() },
+  { id: 'team', kind: 'action', label: 'Team…', run: (actions) => actions.setTeam() },
   { id: 'help', kind: 'action', label: 'Help', run: (actions) => COMMANDS.find((c) => c.id === 'help')!.run(actions, '') },
   { id: 'quit', kind: 'action', label: 'Quit', run: (actions) => actions.quit() },
 ];

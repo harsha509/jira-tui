@@ -12,14 +12,31 @@ export interface SelectDialogProps {
   onCancel: () => void;
 }
 
-/** Items whose label or hint contains every word of `filter`, case-insensitively. */
+/** Items whose label or hint contains every word of `filter`, case-insensitively; separators drop out. */
 export function filterItems(items: SelectItem[], filter: string): SelectItem[] {
   const words = filter.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return items;
   return items.filter((item) => {
+    if (item.separator) return false;
     const haystack = `${item.label} ${item.hint ?? ''}`.toLowerCase();
     return words.every((word) => haystack.includes(word));
   });
+}
+
+/** Next selectable index from `from`, skipping separators; `from` when there is none that way. */
+function step(items: SelectItem[], from: number, direction: 1 | -1): number {
+  for (let i = from + direction; i >= 0 && i < items.length; i += direction) {
+    if (!items[i].separator) return i;
+  }
+  return from;
+}
+
+/** `index` clamped into range and moved off a separator. */
+export function selectableIndex(items: SelectItem[], index: number): number {
+  const start = Math.max(0, Math.min(index, items.length - 1));
+  if (!items[start]?.separator) return start;
+  const forward = step(items, start, 1);
+  return forward === start ? step(items, start, -1) : forward;
 }
 
 /** Pick-list modal: ↑↓ move, typing filters, Enter selects, Esc cancels. */
@@ -31,20 +48,21 @@ export function SelectDialog({ title, subtitle, items, onSelect, onCancel }: Sel
   const [index, setIndex] = useState(0);
 
   const filtered = useMemo(() => filterItems(items, filter), [items, filter]);
-  const selected = Math.min(index, Math.max(0, filtered.length - 1));
+  const selected = selectableIndex(filtered, index);
   const viewport = Math.max(3, rows - 9 - (subtitle ? 1 : 0));
   const { items: visible, start } = windowFor(filtered, selected, viewport);
   const width = Math.min(columns - 6, 90);
-  const labelWidth = Math.min(40, Math.max(12, ...items.map((i) => i.label.length)));
+  const labelWidth = Math.min(40, Math.max(12, ...items.filter((i) => !i.separator).map((i) => i.label.length)));
 
   useInput((input, key) => {
     if (key.escape) onCancel();
     else if (key.return) {
-      if (filtered[selected]) onSelect(filtered[selected]);
-    } else if (key.upArrow) setIndex(Math.max(0, selected - 1));
-    else if (key.downArrow) setIndex(Math.min(filtered.length - 1, selected + 1));
-    else if (key.pageUp) setIndex(Math.max(0, selected - viewport));
-    else if (key.pageDown) setIndex(Math.min(filtered.length - 1, selected + viewport));
+      const item = filtered[selected];
+      if (item && !item.separator) onSelect(item);
+    } else if (key.upArrow) setIndex(step(filtered, selected, -1));
+    else if (key.downArrow) setIndex(step(filtered, selected, 1));
+    else if (key.pageUp) setIndex(selectableIndex(filtered, selected - viewport));
+    else if (key.pageDown) setIndex(selectableIndex(filtered, selected + viewport));
     else if (key.backspace || key.delete) {
       setFilter((f) => f.slice(0, -1));
       setIndex(0);
@@ -75,6 +93,13 @@ export function SelectDialog({ title, subtitle, items, onSelect, onCancel }: Sel
           ) : (
             visible.map((item, i) => {
               const isSelected = start + i === selected;
+              if (item.separator) {
+                return (
+                  <Text key={item.id} color={COLORS.dimmed} wrap="truncate">
+                    {`── ${item.label} `.padEnd(Math.max(12, width - 6), '─')}
+                  </Text>
+                );
+              }
               return (
                 <Text key={item.id} wrap="truncate" color={isSelected ? COLORS.brand : COLORS.white} bold={isSelected}>
                   {isSelected ? `${symbols.prompt} ` : '  '}
